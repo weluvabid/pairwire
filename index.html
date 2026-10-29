@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#111b2a" />
+    <meta
+      name="description"
+      content="Pairwire is an experimental browser-based messaging app for direct peer-to-peer conversations. No accounts or messaging servers."
+    />
+    <title>Pairwire — direct conversations</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Conversations">
+        <div class="brand-row">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div>
+            <div class="brand-name">pairwire<span class="brand-period">.</span></div>
+            <div class="brand-caption">A little more direct.</div>
+          </div>
+        </div>
+
+        <div class="sidebar-actions">
+          <button class="button button-primary button-wide" id="new-connection-button" type="button">
+            <span class="button-plus" aria-hidden="true">+</span> New connection
+          </button>
+        </div>
+
+        <div class="sidebar-section-heading">
+          <span>CONVERSATIONS</span>
+          <span class="section-count" id="conversation-count">0</span>
+        </div>
+        <div class="conversation-list" id="conversation-list" aria-live="polite">
+          <div class="sidebar-empty">Your people will show up here.</div>
+        </div>
+
+        <div class="sidebar-bottom">
+          <div class="profile-avatar" id="profile-avatar" aria-hidden="true">Y</div>
+          <div class="profile-fields">
+            <label for="display-name">Your display name</label>
+            <input id="display-name" name="display-name" maxlength="48" value="You" autocomplete="nickname" />
+          </div>
+          <span class="local-dot" title="Stored in this browser" aria-label="Stored in this browser"></span>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <div class="topbar-peer">
+            <div class="avatar avatar-large" id="active-avatar" aria-hidden="true">↔</div>
+            <div>
+              <h1 id="active-title">Direct, by design.</h1>
+              <div class="connection-line">
+                <span class="status-dot" id="connection-dot"></span>
+                <span id="connection-label">No active connection</span>
+              </div>
+            </div>
+          </div>
+          <div class="topbar-actions">
+            <span class="transport-pill"><span class="transport-icon" aria-hidden="true">↗</span> Peer to peer</span>
+            <button class="icon-button" id="connection-details-button" type="button" aria-label="Connection details" title="Connection details">···</button>
+          </div>
+        </header>
+
+        <section class="welcome-panel" id="welcome-panel">
+          <div class="welcome-eyebrow"><span class="eyebrow-line"></span> NO ACCOUNTS. NO CHAT SERVER.</div>
+          <h2>Good conversations<br />take the <em>direct route.</em></h2>
+          <p class="welcome-copy">
+            Pair two browsers, make a direct connection, and talk. Your messages stay in this browser
+            until they can be delivered to the other side.
+          </p>
+
+          <div class="welcome-actions">
+            <button class="button button-primary button-large" id="welcome-new-button" type="button">
+              Start a conversation <span aria-hidden="true">↗</span>
+            </button>
+            <button class="button button-secondary button-large" id="welcome-join-button" type="button">
+              Join with invitation
+            </button>
+          </div>
+
+          <div class="steps-grid">
+            <article class="step-card">
+              <span class="step-number">01</span>
+              <div class="step-icon" aria-hidden="true">⌁</div>
+              <h3>Pair manually</h3>
+              <p>Exchange a small connection note with someone you know.</p>
+            </article>
+            <article class="step-card">
+              <span class="step-number">02</span>
+              <div class="step-icon step-icon-green" aria-hidden="true">↔</div>
+              <h3>Connect directly</h3>
+              <p>Your browsers talk to each other over a WebRTC data channel.</p>
+            </article>
+            <article class="step-card">
+              <span class="step-number">03</span>
+              <div class="step-icon step-icon-lilac" aria-hidden="true">⌁</div>
+              <h3>Keep the thread</h3>
+              <p>Conversation history and pending messages are saved locally.</p>
+            </article>
+          </div>
+
+          <div class="footnote-row">
+            <span><span class="footnote-check">✓</span> No signup or account</span>
+            <span><span class="footnote-check">✓</span> Local message history</span>
+            <span><span class="footnote-check">✓</span> Open-source experiment</span>
+          </div>
+        </section>
+
+        <section class="chat-panel hidden" id="chat-panel" aria-label="Conversation">
+          <div class="chat-history" id="chat-history" aria-live="polite">
+            <div class="history-start"><span></span><p>This is the beginning of your conversation.</p><span></span></div>
+          </div>
+          <div class="composer-wrap">
+            <div class="composer-hint" id="composer-hint">Messages are stored on this device.</div>
+            <form class="composer" id="message-form">
+              <label class="visually-hidden" for="message-input">Write a message</label>
+              <textarea
+                id="message-input"
+                name="message"
+                rows="1"
+                maxlength="8000"
+                placeholder="Write something thoughtful…"
+                autocomplete="off"
+                disabled
+              ></textarea>
+              <div class="composer-bottom">
+                <span class="composer-count" id="message-count">0 / 8,000</span>
+                <button class="button button-primary send-button" id="send-button" type="submit" disabled>
+                  Send <span aria-hidden="true">↑</span>
+                </button>
+              </div>
+            </form>
+            <div class="composer-footer"><span>Enter to send</span><span>Shift + Enter for a new line</span></div>
+          </div>
+        </section>
+
+        <footer class="main-footer">
+          <span><span class="footer-led"></span> A small experiment in direct communication</span>
+          <span>Pairwire <span class="footer-divider">/</span> v0.1.0</span>
+        </footer>
+      </main>
+    </div>
+
+    <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+    <dialog class="pairing-dialog" id="pairing-dialog" aria-labelledby="pairing-title">
+      <div class="dialog-header">
+        <div>
+          <div class="dialog-eyebrow">MAKE A CONNECTION</div>
+          <h2 id="pairing-title">Meet on your own terms.</h2>
+          <p>Pairwire uses a manual exchange to connect browsers. The chat itself doesn't pass through a messaging server.</p>
+        </div>
+        <button class="icon-button dialog-close" id="close-pairing-button" type="button" aria-label="Close pairing dialog">×</button>
+      </div>
+
+      <div class="pairing-tabs" role="tablist" aria-label="Pairing method">
+        <button class="pairing-tab is-active" id="create-tab" type="button" role="tab" aria-selected="true" data-mode="create">Create invitation</button>
+        <button class="pairing-tab" id="join-tab" type="button" role="tab" aria-selected="false" data-mode="join">Join with invitation</button>
+      </div>
+
+      <section class="pairing-view" id="create-view" role="tabpanel" aria-labelledby="create-tab">
+        <div class="pairing-step-row"><span class="step-badge">1</span><div><h3>Create an invitation</h3><p>Generate connection details and send the text below to the other person.</p></div></div>
+        <button class="button button-primary" id="create-invitation-button" type="button">Generate invitation <span aria-hidden="true">↗</span></button>
+        <label class="field-label" for="invitation-output">YOUR INVITATION</label>
+        <textarea id="invitation-output" class="signal-textarea" rows="4" placeholder="Your invitation will appear here…" readonly></textarea>
+        <div class="field-actions"><span class="field-caption">Share this through a channel you already use.</span><button class="button button-secondary button-small" id="copy-invitation-button" type="button" disabled>Copy invitation</button></div>
+        <div class="pairing-divider"><span>THEN, WHEN THEY REPLY</span></div>
+        <div class="pairing-step-row pairing-step-compact"><span class="step-badge">2</span><div><h3>Complete the connection</h3><p>Paste their response below to finish pairing.</p></div></div>
+        <label class="field-label" for="response-input">THEIR RESPONSE</label>
+        <textarea id="response-input" class="signal-textarea" rows="3" placeholder="Paste the response text here…"></textarea>
+        <button class="button button-primary button-dialog-action" id="complete-pairing-button" type="button">Complete pairing</button>
+      </section>
+
+      <section class="pairing-view hidden" id="join-view" role="tabpanel" aria-labelledby="join-tab">
+        <div class="pairing-step-row"><span class="step-badge">1</span><div><h3>Paste an invitation</h3><p>Ask the other person to create an invitation and send it to you.</p></div></div>
+        <label class="field-label" for="join-input">THEIR INVITATION</label>
+        <textarea id="join-input" class="signal-textarea" rows="5" placeholder="Paste the invitation text here…"></textarea>
+        <button class="button button-primary button-dialog-action" id="accept-invitation-button" type="button">Create response <span aria-hidden="true">↗</span></button>
+        <div class="pairing-divider"><span>SHARE YOUR RESPONSE BACK</span></div>
+        <div class="pairing-step-row pairing-step-compact"><span class="step-badge">2</span><div><h3>Send the response</h3><p>The connection will open after they import your response.</p></div></div>
+        <label class="field-label" for="response-output">YOUR RESPONSE</label>
+        <textarea id="response-output" class="signal-textarea" rows="5" placeholder="Your response will appear here…" readonly></textarea>
+        <div class="field-actions"><span class="field-caption">Keep this page open until connected.</span><button class="button button-secondary button-small" id="copy-response-button" type="button" disabled>Copy response</button></div>
+      </section>
+
+      <div class="dialog-note"><span class="note-icon" aria-hidden="true">i</span><p>Pairing may fail on some networks. This experimental version has no relay server, so it cannot guarantee that every pair of networks can connect.</p></div>
+    </dialog>
+
+    <dialog class="details-dialog" id="details-dialog" aria-labelledby="details-title">
+      <div class="dialog-header compact-header">
+        <div><div class="dialog-eyebrow">CONNECTION DETAILS</div><h2 id="details-title">A direct line.</h2></div>
+        <button class="icon-button" id="close-details-button" type="button" aria-label="Close details">×</button>
+      </div>
+      <div class="details-list">
+        <div><span>Connection</span><strong id="detail-connection">Not connected</strong></div>
+        <div><span>Peer</span><strong id="detail-peer">—</strong></div>
+        <div><span>Message storage</span><strong>This browser</strong></div>
+        <div><span>Messaging backend</span><strong>None</strong></div>
+      </div>
+      <button class="button button-secondary button-wide" id="disconnect-button" type="button">Close connection</button>
+      <p class="details-note">Closing the connection won't delete your conversation history or pending messages.</p>
+    </dialog>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
