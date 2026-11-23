@@ -1,6 +1,22 @@
 @import "tailwindcss";
 @plugin "daisyui";
 
+@font-face {
+  font-family: "Atkinson Hyperlegible";
+  src: url("/fonts/atkinson-hyperlegible-regular.otf") format("opentype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Atkinson Hyperlegible";
+  src: url("/fonts/atkinson-hyperlegible-bold.otf") format("opentype");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
 @plugin "daisyui/theme" {
   name: "light";
   default: true;
@@ -25,7 +41,7 @@
 
 :root {
   color-scheme: light;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Atkinson Hyperlegible", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -38,24 +54,20 @@
 html, body, #app { width: 100%; min-width: 320px; min-height: 100%; margin: 0; }
 body { min-height: 100vh; min-height: 100dvh; background: var(--color-base-200); }
 button, input, textarea { font: inherit; }
-button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid color-mix(in oklab, var(--color-success) 70%, transparent); outline-offset: 2px; }
+/* Keyboard focus must remain visible even when DaisyUI/Tailwind component utilities define their own focus styles. */
+:where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
+  outline: 3px solid #176b4b !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 0 2px #fff !important;
+}
+:where(button, input, textarea, select):focus:not(:focus-visible) { outline: none; }
 
 /* Application layout only. Component appearance and behaviour come from DaisyUI. */
 .app-drawer { height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
 .app-content { min-width: 0; min-height: 0; height: 100%; overflow: hidden; }
-.sidebar { display: flex; width: 17rem; height: 100vh; height: 100dvh; min-height: 0; flex-direction: column; overflow: hidden; padding: 1.75rem 1rem 1rem; border-right: 1px solid var(--pairwire-line); background: #fbfbfb; }
+.sidebar { display: flex; width: 17rem; height: 100vh; height: 100dvh; min-height: 0; flex-direction: column; overflow: hidden; padding: 1rem 1rem 1rem; border-right: 1px solid var(--pairwire-line); background: #fbfbfb; }
 .sidebar-header { flex: 0 0 auto; }
-.brand-row { display: flex; gap: .7rem; align-items: center; padding: 0 .6rem 1.75rem; }
-.brand-mark { display: flex; width: 2.2rem; height: 2.2rem; flex: 0 0 auto; align-items: center; justify-content: center; gap: 3px; border: 1px solid var(--pairwire-line); border-radius: .7rem; background: #fff; }
-.brand-mark span { width: 4px; border-radius: 4px; background: #30383e; }
-.brand-mark span:nth-child(1), .brand-mark span:nth-child(3) { height: 11px; opacity: .55; }
-.brand-mark span:nth-child(2) { height: 18px; }
-.brand-name { font-size: 1.25rem; line-height: 1; font-weight: 800; letter-spacing: -.06em; }
-.brand-period { color: #53866d; }
-.brand-caption { margin-top: .3rem; color: #8a9399; font-size: .65rem; }
-.brand-user { margin-top: .35rem; color: #929ca1; font-size: .58rem; }
-.brand-user strong { color: #53645b; font-weight: 650; }
-.sidebar-actions { padding: 0 .25rem 1.5rem; }
+.sidebar-actions { padding: 0 .25rem 1rem; }
 .sidebar-section-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 .6rem .6rem; color: #899298; font: 600 .58rem/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; letter-spacing: .08em; }
 .conversation-list { display: flex; min-height: 0; width: 100%; flex: 1 1 0%; flex-direction: column; flex-wrap: nowrap; align-items: stretch; align-content: flex-start; gap: .65rem; overflow-x: hidden; overflow-y: auto; padding-inline: .25rem; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .conversation-entry { position: relative; min-width: 0; }
@@ -181,3 +193,34 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 }
 .conversation-entry.is-selected .conversation-name { color: #294f3d; }
 .conversation-controls { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; gap: .15rem; padding-right: .15rem; }
+
+/* Text tokens are intentionally darker than decorative borders and surfaces. */
+:root { --pairwire-muted: #626d73; }
+.sidebar-section-heading, .conversation-preview,
+.welcome-copy, .step-card p, .footnote-row, .main-footer, .history-start p,
+.chat-header, .composer-hint { color: #626d73; }
+
+/* Respect reduced-motion preferences without removing state transitions entirely. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* The mobile drawer is modal while open; keep its close affordances operable. */
+.drawer-overlay { border: 0; padding: 0; cursor: pointer; }
+@media (max-width: 1023px) {
+  .sidebar { height: 100dvh; padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+}
+.sidebar-topline { display: flex; min-height: 2.5rem; align-items: center; justify-content: space-between; gap: .75rem; margin: 0 .25rem 1rem; }
+.sidebar-identity { min-width: 0; }
+.brand-name { color: #20272d; font-size: 1.15rem; line-height: 1.15; font-weight: 800; letter-spacing: -.055em; }
+.brand-user { margin-top: .25rem; color: var(--pairwire-muted); font-size: .68rem; line-height: 1.3; }
+.brand-user strong { color: #53645b; font-weight: 650; }
+.sidebar-topline-actions { display: flex; flex: 0 0 auto; align-items: center; gap: .5rem; }
+.sidebar-github { color: #315f49; font-size: .7rem; font-weight: 600; text-decoration: none; }
+.sidebar-github:hover { text-decoration: underline; text-underline-offset: 3px; }
+.welcome-eyebrow, .dialog-eyebrow { color: #4d6d5b; }

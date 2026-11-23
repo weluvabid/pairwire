@@ -47,10 +47,11 @@ export function ConversationActions({ peerName, connected, onReconnect, onDetail
           items[(index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length]?.focus();
         } else if (event.key === "Home") { event.preventDefault(); items[0]?.focus(); }
         else if (event.key === "End") { event.preventDefault(); items.at(-1)?.focus(); }
+        else if (event.key === "Tab") { setOpen(false); }
       }}>
         <li><button type="button" role="menuitem" class="conversation-action-item" disabled={connected} onClick={() => action(onReconnect)}><span aria-hidden="true">↻</span>{connected ? "Already connected" : "Reconnect"}</button></li>
         <li><button type="button" role="menuitem" class="conversation-action-item" onClick={() => action(onDetails)}><span aria-hidden="true">ⓘ</span>Connection details</button></li>
-        <li><button type="button" role="menuitem" class="conversation-action-item" onClick={() => action(onDelete)}><span aria-hidden="true">⌫</span>Delete conversation</button></li>
+        <li><button type="button" role="menuitem" class="conversation-action-item" onClick={() => { setOpen(false); triggerRef.current?.focus(); onDelete(); }}><span aria-hidden="true">⌫</span>Delete conversation</button></li>
       </ul>
     </div>, document.body)}
   </>;

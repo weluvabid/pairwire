@@ -59,9 +59,14 @@ function App() {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [historyScrolled, setHistoryScrolled] = useState(false);
+  const [messageAnnouncement, setMessageAnnouncement] = useState("");
   const historyRef = useRef<HTMLDivElement | null>(null);
+  const drawerTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const lastRenderedConversation = useRef<string | null>(null);
+  const announcedConversation = useRef<string | null>(null);
+  const announcedMessage = useRef<string | null>(null);
   const previousScroll = useRef({ height: 0, top: 0, nearBottom: true });
   const toastId = useRef(0);
   const connectedPeer = messaging.connectedPeer;
@@ -127,6 +132,49 @@ function App() {
   }, [startupAttempt]);
 
   useEffect(() => {
+    if (!mobileDrawerOpen) return;
+    const sidebar = sidebarRef.current;
+    const focusable = () => {
+      const selector = 'button:not(:disabled), a[href], input:not(:disabled), [tabindex]:not([tabindex="-1"])';
+      const sidebarItems = Array.from(sidebar?.querySelectorAll<HTMLElement>(selector) ?? []);
+      const menuItems = Array.from(document.querySelectorAll<HTMLElement>(`.conversation-actions-menu ${selector}`));
+      return [...sidebarItems, ...menuItems].filter((element) => element.getAttribute("aria-hidden") !== "true");
+    };
+    focusable()[0]?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setMobileDrawerOpen(false);
+        drawerTriggerRef.current?.focus();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const items = focusable();
+      if (!items.length) return;
+      const first = items[0]!;
+      const last = items[items.length - 1]!;
+      const activeIsInsideDrawer = Boolean(sidebar?.contains(document.activeElement)
+        || document.querySelector(".conversation-actions-menu")?.contains(document.activeElement));
+      if (event.shiftKey && (document.activeElement === first || !activeIsInsideDrawer)) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !activeIsInsideDrawer)) {
+        event.preventDefault(); first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [mobileDrawerOpen]);
+
+  const drawerWasOpen = useRef(false);
+  useEffect(() => {
+    if (mobileDrawerOpen) drawerWasOpen.current = true;
+    else if (drawerWasOpen.current) {
+      drawerWasOpen.current = false;
+      drawerTriggerRef.current?.focus();
+    }
+  }, [mobileDrawerOpen]);
+
+  useEffect(() => {
     if (!initialized) return;
     let cancelled = false;
     void Promise.all([messaging.getPeers(), messaging.getConversations(), messaging.getOutbox()]).then(([nextPeers, nextConversations, nextOutbox]) => {
@@ -187,6 +235,23 @@ function App() {
     if (nearBottom) history.scrollTop = history.scrollHeight;
     else history.scrollTop = top + (history.scrollHeight - height);
   }, [messages]);
+
+  useEffect(() => {
+    if (!selectedPeer || !localPeer) return;
+    const conversationId = conversationIdFor(localPeer.id, selectedPeer.id);
+    if (lastRenderedConversation.current !== conversationId) return;
+    const latestIncoming = [...messages].reverse().find((message) => message.direction === "incoming");
+    if (announcedConversation.current !== conversationId) {
+      announcedConversation.current = conversationId;
+      announcedMessage.current = latestIncoming?.id ?? null;
+      setMessageAnnouncement("");
+      return;
+    }
+    if (latestIncoming && latestIncoming.id !== announcedMessage.current) {
+      announcedMessage.current = latestIncoming.id;
+      setMessageAnnouncement(`New message from ${selectedPeer.name}: ${latestIncoming.text}`);
+    }
+  }, [messages, selectedPeer?.id, selectedPeer?.name, localPeer?.id]);
 
   useTextareaAutosize(messageInputRef, draft);
 
@@ -377,13 +442,13 @@ function App() {
         <main class="main-panel">
           {!initialized ? startupError
             ? <div class="flex flex-1 items-center justify-center p-6"><div class="alert alert-error max-w-lg" role="alert"><div class="flex flex-col gap-3"><span>{startupError}</span><button class="btn btn-sm" type="button" onClick={() => setStartupAttempt((attempt) => attempt + 1)}>Retry startup</button></div></div></div>
-            : <div class="flex flex-1 flex-col items-center justify-center gap-3" role="status" aria-live="polite"><span class="loading loading-spinner loading-md text-base-content/45" aria-hidden="true" /><span class="text-xs text-base-content/55">Preparing your conversations…</span></div>
+            : <div class="flex flex-1 flex-col items-center justify-center gap-3" role="status" aria-live="polite"><span class="loading loading-spinner loading-md text-base-content/70" aria-hidden="true" /><span class="text-xs text-base-content/70">Preparing your conversations…</span></div>
             : <>
           <div class="mobile-context lg:hidden">
-            <label htmlFor="pairwire-drawer" class="btn btn-ghost btn-square btn-sm" aria-label="Open conversations">☰</label>
+            <button ref={drawerTriggerRef} type="button" class="btn btn-ghost btn-square btn-sm" aria-label="Open conversations" aria-expanded={mobileDrawerOpen} aria-controls="pairwire-sidebar" onClick={() => setMobileDrawerOpen(true)}>☰</button>
             {selectedPeer && <div class="min-w-0 flex-1">
               <div class="truncate text-sm font-semibold">{selectedPeer.name}</div>
-              <div class="flex items-center gap-2 text-xs text-base-content/55"><ConnectionDot peer={selectedPeer} connected={isConnectedToSelection} connecting={reconnectPeerId === selectedPeer.id && connectionState === "connecting"} failed={reconnectPeerId === selectedPeer.id && connectionState === "failed"} /><span>{peerConnectionLabel(isConnectedToSelection, reconnectPeerId === selectedPeer.id ? connectionState : "disconnected")}</span></div>
+              <div class="flex items-center gap-2 text-xs text-base-content/70"><ConnectionDot peer={selectedPeer} connected={isConnectedToSelection} connecting={reconnectPeerId === selectedPeer.id && connectionState === "connecting"} failed={reconnectPeerId === selectedPeer.id && connectionState === "failed"} /><span>{peerConnectionLabel(isConnectedToSelection, reconnectPeerId === selectedPeer.id ? connectionState : "disconnected")}</span></div>
             </div>}
           </div>
 
@@ -393,23 +458,24 @@ function App() {
             <section class="chat-panel" aria-label="Conversation">
               {(!isConnectedToSelection || pendingForSelection > 0) && <div class={`chat-notices ${historyScrolled ? "is-scrolled" : ""}`}>
                 {!isConnectedToSelection && <div class={`alert ${pairingNotice ? "alert-info" : "alert-warning"} mx-auto max-w-xl text-xs`} role="status" aria-live="polite"><span>{pairingNotice ?? `${selectedPeer.name} is disconnected. Your local history is safe; reconnect to continue this conversation.`}</span></div>}
-                {pendingForSelection > 0 && <div class="alert alert-info mx-auto max-w-xl text-xs"><span>{pendingForSelection} {pendingForSelection === 1 ? "message is" : "messages are"} waiting for delivery. They will be retried when you reconnect.</span></div>}
+                {pendingForSelection > 0 && <div class="alert alert-info mx-auto max-w-xl text-xs" role="status" aria-live="polite"><span>{pendingForSelection} {pendingForSelection === 1 ? "message is" : "messages are"} waiting for delivery. They will be retried when you reconnect.</span></div>}
               </div>}
-              <div class="chat-history" ref={historyRef} onScroll={(event) => setHistoryScrolled((event.currentTarget as HTMLDivElement).scrollTop > 0)} aria-live="polite">
+              <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">{messageAnnouncement}</div>
+              <div class="chat-history" ref={historyRef} onScroll={(event) => setHistoryScrolled((event.currentTarget as HTMLDivElement).scrollTop > 0)} role="region" aria-label="Message history" tabIndex={0}>
                 <div class="history-start"><span /><p>{messages.length ? "Conversation history" : "This is the beginning of your conversation."}</p><span /></div>
                 {messages.map((message) => <Message key={message.id} message={message} peerName={connectedPeer?.name ?? selectedPeer.name} onRetry={() => void withBusy(`retry:${message.id}`, () => messaging.retryMessage(message.id))} retryBusy={busyAction === `retry:${message.id}`} />)}
               </div>
               <div class="composer-wrap">
-                <div class="composer-hint">{composerHint}</div>
+                <div id="composer-hint" class="composer-hint">{composerHint}</div>
                 <form class="rounded-xl border border-base-300 bg-base-100 p-3 shadow-sm focus-within:border-success/40 focus-within:shadow-md" onSubmit={(event) => void sendMessage(event as unknown as SubmitEvent)}>
                   <label class="sr-only" htmlFor="message-input">Write a message</label>
-                  <textarea ref={messageInputRef} id="message-input" class="textarea textarea-ghost min-h-16 max-h-36 w-full resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-xs leading-relaxed focus:outline-none" name="message" rows={1} maxLength={MAX_TEXT_LENGTH} placeholder="Write something thoughtful…" value={draft} disabled={!isConnectedToSelection} onInput={(event) => setDraft((event.currentTarget as HTMLTextAreaElement).value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); (event.currentTarget as HTMLTextAreaElement).form?.requestSubmit(); } }} />
+                  <textarea ref={messageInputRef} id="message-input" class="textarea textarea-ghost min-h-16 max-h-36 w-full resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-xs leading-relaxed" name="message" aria-describedby="composer-hint composer-count" rows={1} maxLength={MAX_TEXT_LENGTH} placeholder="Write something thoughtful…" value={draft} disabled={!isConnectedToSelection} onInput={(event) => setDraft((event.currentTarget as HTMLTextAreaElement).value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); (event.currentTarget as HTMLTextAreaElement).form?.requestSubmit(); } }} />
                   <div class="flex items-center justify-between border-t border-base-200 pt-2">
-                    <span class="font-mono text-[.62rem] text-base-content/50">{draft.length.toLocaleString()} / {MAX_TEXT_LENGTH.toLocaleString()}</span>
+                    <span id="composer-count" class="font-mono text-[.62rem] text-base-content/70">{draft.length.toLocaleString()} of {MAX_TEXT_LENGTH.toLocaleString()} characters</span>
                     <button class="btn btn-primary btn-sm" type="submit" disabled={sending || !isConnectedToSelection || !draft.trim()}>{sending ? <span class="loading loading-spinner loading-xs" /> : "Send ↑"}</button>
                   </div>
                 </form>
-                <div class="mt-2 flex justify-end gap-3 text-[.55rem] text-base-content/40"><span>Enter to send</span><span>Shift + Enter for a new line</span></div>
+                <div class="mt-2 flex justify-end gap-3 text-[.55rem] text-base-content/75"><span>Enter to send</span><span>Shift + Enter for a new line</span></div>
               </div>
             </section>
           )}
@@ -418,10 +484,19 @@ function App() {
         </main>
       </div>
       <div class="drawer-side z-40">
-        <label htmlFor="pairwire-drawer" aria-label="Close conversations" class="drawer-overlay" />
-        <aside class="sidebar" aria-label="Conversations">
+        <button type="button" aria-label="Close conversations" class="drawer-overlay" onClick={() => setMobileDrawerOpen(false)} />
+        <aside ref={sidebarRef} id="pairwire-sidebar" class="sidebar" aria-label="Conversations" role={mobileDrawerOpen ? "dialog" : "complementary"} aria-modal={mobileDrawerOpen ? "true" : undefined}>
           <div class="sidebar-header">
-            <div class="brand-row"><div class="brand-mark" aria-hidden="true"><span /><span /><span /></div><div class="min-w-0"><div class="brand-name">pairwire<span class="brand-period">.</span></div><div class="brand-caption">A little more direct.</div>{localPeer && <div class="brand-user" title={`This device is using the name ${localPeer.name}`}>Using as <strong>{localPeer.name}</strong></div>}</div></div>
+            <div class="sidebar-topline">
+              <div class="sidebar-identity">
+                <div class="brand-name">pairwire</div>
+                {localPeer && <div class="brand-user" title={`This device is using the name ${localPeer.name}`}>Using as <strong>{localPeer.name}</strong></div>}
+              </div>
+              <div class="sidebar-topline-actions">
+                <a class="sidebar-github" href="https://github.com/weluvabid/pairwire" target="_blank" rel="noopener noreferrer">GitHub</a>
+                <button type="button" class="btn btn-ghost btn-square btn-sm lg:hidden" aria-label="Close conversations" onClick={() => setMobileDrawerOpen(false)}>✕</button>
+              </div>
+            </div>
             <div class="sidebar-actions"><button class="btn btn-primary btn-sm w-full" type="button" disabled={!initialized || !localPeer || nameSetupOpen} onClick={() => { setMobileDrawerOpen(false); openPairing(); }}>＋ New connection</button></div>
             <div class="sidebar-section-heading"><span>CONVERSATIONS</span><span class="badge badge-ghost">{peers.length}</span></div>
           </div>
@@ -473,7 +548,7 @@ function App() {
       <DeleteConversationModal peer={deleteTarget} pendingCount={deleteTarget ? pendingCountsByPeer.get(deleteTarget.id) ?? 0 : 0} busy={busyAction === (deleteTarget ? `delete:${deleteTarget.id}` : "")} onCancel={() => setDeleteTarget(null)} onConfirm={() => void confirmDeleteConversation()} />
       <NameSetupModal open={nameSetupOpen} value={displayNameDraft} saving={nameSaving} onChange={setDisplayNameDraft} onSubmit={(event) => void saveDisplayName(event)} />
 
-      <div class="toast toast-end toast-bottom z-[60] w-[min(22rem,calc(100vw-2rem))] pointer-events-none [&>.alert]:pointer-events-auto" aria-live="polite" aria-atomic="true">
+      <div class="toast toast-end toast-bottom z-[60] w-[min(22rem,calc(100vw-2rem))] pointer-events-none [&>.alert]:pointer-events-auto" aria-live="polite" aria-atomic="false">
         {notices.map((notice) => <div class={`alert ${notice.kind === "error" ? "alert-error" : "alert-info"}`} key={notice.id}><span>{notice.message}</span></div>)}
       </div>
     </div>

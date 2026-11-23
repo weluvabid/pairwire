@@ -3,5 +3,5 @@ import type { PeerRecord } from "../../core/types.js";
 export function ConnectionDot({ peer, connected, connecting, failed }: { peer: PeerRecord; connected: boolean; connecting: boolean; failed: boolean }) {
   const label = connected ? "Connected" : connecting ? "Connecting" : failed ? "Connection failed" : "Disconnected";
   const color = connected ? "status-success" : connecting ? "status-warning" : failed ? "status-error" : "status-neutral";
-  return <span class="tooltip tooltip-left conversation-status" data-tip={label} tabIndex={0} aria-label={`${peer.name}: ${label}`} title={`${peer.name}: ${label}`}><span class={`status status-sm ${color}`} aria-hidden="true" /></span>;
+  return <span class="tooltip tooltip-left conversation-status" data-tip={label} role="img" aria-label={`${peer.name}: ${label}`} title={`${peer.name}: ${label}`}><span class={`status status-sm ${color}`} aria-hidden="true" /></span>;
 }

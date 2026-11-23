@@ -4,7 +4,7 @@
 
 Pairwire is an experimental browser-based, peer-to-peer messaging app. It uses WebRTC data channels for chat, clipboard-assisted manual signaling, and IndexedDB for local conversation history and pending messages.
 
-This is a small engineering experiment. There is no application backend, account system, server-side message storage, relay service, or launch infrastructure in this repository.
+Pairwire connects two browsers directly. There are no accounts or messaging servers; conversations and pending messages stay in each browser’s local storage.
 
 ## What works
 
@@ -28,7 +28,7 @@ This is a small engineering experiment. There is no application backend, account
 ## Run locally
 
 ```sh
-npm install
+npm ci
 npm run dev
 ```
 
@@ -104,7 +104,7 @@ MessagingService
 
 The Preact UI renders application state and collects user input. Components are grouped by feature under `src/components`; UI lifecycle hooks live in `src/hooks`; clipboard access is isolated in `src/services`; and pure formatting/derived-data helpers live in `src/utils`. The UI calls `MessagingService` for pairing, messaging, connection state, and data retrieval; it does not implement transport or persistence semantics. `MessagingService` coordinates transport with persistence. `WebRtcTransport` exchanges frames and exposes connection lifecycle events; it does not decide whether a message was delivered. `PairwireStore` owns transactional local persistence. Protocol decoding rejects unsafe timestamps, malformed identifiers, and conflicting message-ID reuse. Incoming frame processing is bounded; if the receive backlog exceeds its limit, the transport closes without acknowledging queued frames so the sender can retry them after reconnecting.
 
-The signaling exchange uses a public STUN server to discover network candidates. STUN is not a messaging relay and does not receive chat contents, but it is an external connection-establishment dependency. There is no TURN relay configured, so some restrictive networks will not connect. That is an intentional MVP limit.
+The signaling exchange uses a public STUN server to discover network candidates. STUN is not a messaging relay and does not receive chat contents, but it is an external connection-establishment dependency. Some restrictive networks may not establish a direct connection because Pairwire does not currently use a TURN relay.
 
 ## Commands
 
@@ -114,12 +114,12 @@ npm run build        # Bundle the static site to dist/
 npm run preview      # Preview the production build locally
 npm run typecheck    # Strict TypeScript check
 npm test             # Compile test modules separately and run Node's test suite
-npm run check        # Typecheck plus tests
+npm run check        # Hygiene, typecheck, and tests
 npm run hygiene:check # Check final newlines and trailing whitespace
 npm run clean:test   # Remove temporary test compilation output
 ```
 
-The unit tests use Node's built-in test runner. Tests compile source modules into the ignored `.test-dist/` directory, separate from the production site. The production build is bundled by Vite into `dist/`; it does not ship the test compilation output or TypeScript declaration files. Preact is the UI runtime; DaisyUI and Tailwind CSS are build-time styling dependencies.
+npm with `package-lock.json` is the canonical package manager for this repository; install with `npm ci`. The unit tests use Node's built-in test runner. Tests compile source modules into the ignored `.test-dist/` directory, separate from the production site. The production build is bundled by Vite into `dist/`; it does not ship the test compilation output or TypeScript declaration files. Preact is the UI runtime; DaisyUI and Tailwind CSS are build-time styling dependencies.
 
 ## Scope and limitations
 
@@ -129,8 +129,14 @@ The unit tests use Node's built-in test runner. Tests compile source modules int
 - Browser storage can be cleared or evicted. IndexedDB persistence is local to the browser origin, not a backup service.
 - Manual signaling is inconvenient and payloads may be long.
 - No TURN relay is included. STUN-assisted direct connection may fail on some networks.
-- A WebRTC connection is encrypted in transit by browser-provided DTLS, but this experiment does not implement a separate identity-verification or end-to-end key-management system.
+- WebRTC encrypts messages in transit using DTLS. Pairwire does not currently provide a separate identity-verification or key-management layer.
 - Delivery confirmation means the remote application persisted the message locally, not that a person read it.
+
+## Accessibility and keyboard use
+
+Pairwire supports keyboard operation for conversation selection, conversation actions, native dialogs, and message composition. Use Tab and Shift+Tab to move between controls, Enter or Space to activate buttons, Escape to close dismissible dialogs and the mobile conversation drawer, and the arrow keys/Home/End inside a conversation actions menu. In the composer, Enter sends and Shift+Enter inserts a newline.
+
+The message history is independently scrollable and can receive keyboard focus. Reduced-motion preferences are respected. Accessibility should be checked in supported browsers with keyboard-only navigation and a screen reader before each release; automated type and unit tests do not replace that manual verification.
 
 ## License
 

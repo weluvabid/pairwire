@@ -44,7 +44,7 @@ export function PairingModal(props: {
         <div>
           <div class="dialog-eyebrow mb-2">MAKE A CONNECTION</div>
           <h2 class="text-xl font-bold tracking-tight">Connect directly.</h2>
-          <p class="mt-2 max-w-md text-xs leading-relaxed text-base-content/60">Exchange connection details through a messaging app you already use. Pairwire never sends your chat through a messaging server.</p>
+          <p class="mt-2 max-w-md text-xs leading-relaxed text-base-content/75">Exchange connection details through a messaging app you already use. Pairwire never sends your chat through a messaging server.</p>
         </div>
         <button class="btn btn-ghost btn-sm btn-square" type="button" onClick={props.onClose} aria-label="Close pairing dialog">✕</button>
       </div>
@@ -58,7 +58,7 @@ export function PairingModal(props: {
         <div class="rounded-box border border-base-300 p-4 space-y-3">
           <div>
             <div class="text-sm font-semibold">Start a new conversation</div>
-            <p class="mt-1 text-xs leading-relaxed text-base-content/60">Create an invitation and share it with someone.</p>
+            <p class="mt-1 text-xs leading-relaxed text-base-content/75">Create an invitation and share it with someone.</p>
           </div>
           <button class="btn btn-primary w-full" type="button" disabled={busy} onClick={props.onGenerate}>
             {props.busyAction === "generate" ? <span class="loading loading-spinner loading-xs" /> : "Create & copy invitation"}
@@ -74,7 +74,7 @@ export function PairingModal(props: {
         {props.reconnectPeerName && <div class="rounded-box border border-base-300 p-4 space-y-3">
           <div>
             <div class="text-sm font-semibold">Reconnect to an existing conversation</div>
-            <p class="mt-1 text-xs leading-relaxed text-base-content/60">Continue your conversation with {props.reconnectPeerName} without losing its history.</p>
+            <p class="mt-1 text-xs leading-relaxed text-base-content/75">Continue your conversation with {props.reconnectPeerName} without losing its history.</p>
           </div>
           <button class="btn btn-outline w-full" type="button" disabled={busy} onClick={props.onReconnect}>
             {props.busyAction === "reconnect" ? <span class="loading loading-spinner loading-xs" /> : `Reconnect with ${props.reconnectPeerName}`}
@@ -84,7 +84,7 @@ export function PairingModal(props: {
         <div class="rounded-box border border-base-300 p-4 space-y-3">
           <div>
             <div class="text-sm font-semibold">Paste what they sent you</div>
-            <p class="mt-1 text-xs leading-relaxed text-base-content/60">Paste an invitation or response. Pairwire will identify it and show the right next step.</p>
+            <p class="mt-1 text-xs leading-relaxed text-base-content/75">Paste an invitation or response. Pairwire will identify it and show the right next step.</p>
           </div>
           <label class="label py-0 text-xs font-medium" htmlFor="pairwire-signaling-input">Received invitation or response</label>
           <textarea
