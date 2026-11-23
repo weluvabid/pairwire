@@ -22,7 +22,7 @@ export function NameSetupModal({ open, value, saving, onChange, onSubmit }: { op
         </fieldset>
         <div class="rounded-xl bg-base-200/70 p-3">
           <div class="mb-2 text-[.62rem] font-semibold tracking-widest text-base-content/75">PREVIEW</div>
-          <div class="flex items-center gap-3"><div class="avatar placeholder"><div class="w-10 rounded-xl border border-success/10 bg-success/10 text-sm font-semibold text-success"><span>{initials(value || "?")}</span></div></div><strong class="text-sm">{value.trim() || "Your name"}</strong></div>
+          <div class="flex min-h-10 items-center gap-3"><div class="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-base-300 bg-base-200 text-sm font-semibold leading-none text-base-content"><span>{initials(value || "?")}</span></div><strong class="text-sm leading-5">{value.trim() || "Your name"}</strong></div>
         </div>
         <div class="modal-action mt-2"><button class="btn btn-primary w-full" type="submit" disabled={saving || !value.trim()}>{saving ? <span class="loading loading-spinner loading-xs" /> : "Continue"}</button></div>
       </form>

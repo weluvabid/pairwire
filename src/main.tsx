@@ -96,6 +96,32 @@ function App() {
   }, [showToast]);
 
   useEffect(() => {
+    const onMessage = (event: Event) => {
+      const message = (event as CustomEvent<ChatMessage>).detail;
+      if (!localPeer || !selectedPeerId) return;
+      const conversationId = conversationIdFor(localPeer.id, selectedPeerId);
+      if (message.conversationId !== conversationId) return;
+
+      const history = historyRef.current;
+      const oldHeight = history?.scrollHeight ?? 0;
+      const oldTop = history?.scrollTop ?? 0;
+      const nearBottom = !history || oldHeight - oldTop - history.clientHeight < 88;
+      previousScroll.current = { height: oldHeight, top: oldTop, nearBottom };
+
+      setMessages((current) => {
+        const index = current.findIndex((item) => item.id === message.id);
+        if (index === -1) return [...current, message].sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+        const next = current.slice();
+        next[index] = message;
+        return next;
+      });
+    };
+    window.addEventListener("pairwire:message", onMessage);
+    return () => window.removeEventListener("pairwire:message", onMessage);
+  }, [localPeer?.id, selectedPeerId]);
+
+
+  useEffect(() => {
     if (!("RTCPeerConnection" in window)) {
       setStartupError("This browser does not support WebRTC data channels.");
       return;
@@ -212,6 +238,7 @@ function App() {
       return;
     }
     const conversationId = conversationIdFor(localPeer.id, selectedPeer.id);
+    previousMessageCount.current = -1;
     let cancelled = false;
     const history = historyRef.current;
     const oldHeight = history?.scrollHeight ?? 0;
@@ -226,15 +253,18 @@ function App() {
       }
     }).catch((error: unknown) => showToast(error instanceof Error ? error.message : "Could not load messages.", "error"));
     return () => { cancelled = true; };
-  }, [selectedPeer?.id, localPeer?.id, revision, showToast]);
+  }, [selectedPeer?.id, localPeer?.id, showToast]);
 
+  const previousMessageCount = useRef(0);
   useEffect(() => {
+    if (messages.length === previousMessageCount.current) return;
+    previousMessageCount.current = messages.length;
     const history = historyRef.current;
     if (!history) return;
     const { height, top, nearBottom } = previousScroll.current;
     if (nearBottom) history.scrollTop = history.scrollHeight;
     else history.scrollTop = top + (history.scrollHeight - height);
-  }, [messages]);
+  }, [messages.length]);
 
   useEffect(() => {
     if (!selectedPeer || !localPeer) return;
@@ -453,7 +483,10 @@ function App() {
           </div>
 
           {!selectedPeer ? (
-            <Welcome onCreate={openPairing} />
+            <div class="welcome-scroll">
+              <Welcome onCreate={openPairing} />
+              <footer class="main-footer"><span><span class="footer-led" /> A small experiment in direct communication</span><span>Pairwire <span class="footer-divider">/</span> v0.1.0</span></footer>
+            </div>
           ) : (
             <section class="chat-panel" aria-label="Conversation">
               {(!isConnectedToSelection || pendingForSelection > 0) && <div class={`chat-notices ${historyScrolled ? "is-scrolled" : ""}`}>
@@ -479,7 +512,7 @@ function App() {
               </div>
             </section>
           )}
-          <footer class="main-footer"><span><span class="footer-led" /> A small experiment in direct communication</span><span>Pairwire <span class="footer-divider">/</span> v0.1.0</span></footer>
+          {selectedPeer && <footer class="main-footer"><span><span class="footer-led" /> A small experiment in direct communication</span><span>Pairwire <span class="footer-divider">/</span> v0.1.0</span></footer>}
           </>}
         </main>
       </div>

@@ -8,6 +8,7 @@ const MAX_QUEUED_INCOMING_FRAMES = 256;
 
 export interface MessagingCallbacks {
   onChange(): void;
+  onMessage(message: ChatMessage): void;
   onNotice(message: string, kind?: "info" | "error"): void;
 }
 
@@ -131,6 +132,7 @@ export class MessagingService {
     });
     const message: ChatMessage = { ...wire, direction: "outgoing", status: "pending" };
     await this.store.createOutgoing(message);
+    this.callbacks.onMessage(message);
     this.callbacks.onChange();
     await this.transmit(message);
     return message;
@@ -278,14 +280,17 @@ export class MessagingService {
   private async transmit(message: ChatMessage, expectedTransport = this.transport): Promise<void> {
     const transport = expectedTransport;
     if (!transport || this.transport !== transport || this.activePeer?.id !== message.toPeerId || transport.connectionState !== "connected") {
-      await this.store.setMessageStatus(message.id, "pending");
+      const updated = await this.store.setMessageStatus(message.id, "pending");
+      if (updated) this.callbacks.onMessage(updated);
       this.callbacks.onChange();
       return;
     }
-    await this.store.setMessageStatus(message.id, "sending");
+    const sending = await this.store.setMessageStatus(message.id, "sending");
+    if (sending) this.callbacks.onMessage(sending);
     this.callbacks.onChange();
     if (this.transport !== transport || this.activePeer?.id !== message.toPeerId || transport.connectionState !== "connected") {
-      await this.store.setMessageStatus(message.id, "pending");
+      const updated = await this.store.setMessageStatus(message.id, "pending");
+      if (updated) this.callbacks.onMessage(updated);
       this.callbacks.onChange();
       return;
     }
@@ -302,10 +307,12 @@ export class MessagingService {
         createdAt: message.createdAt,
       };
       transport.send(encodeFrame(wire));
-      await this.store.setMessageStatus(message.id, "sent");
+      const updated = await this.store.setMessageStatus(message.id, "sent");
+      if (updated) this.callbacks.onMessage(updated);
     } catch (error) {
       try {
-        await this.store.setMessageStatus(message.id, "failed");
+        const updated = await this.store.setMessageStatus(message.id, "failed");
+        if (updated) this.callbacks.onMessage(updated);
       } catch {
         // Preserve the original transport error; the message remains in the outbox.
       }
@@ -328,7 +335,8 @@ export class MessagingService {
       const original = await this.store.getMessage(frame.messageId);
       if (!original || original.direction !== "outgoing" || original.fromPeerId !== local.id || original.toPeerId !== frame.fromPeerId) return;
       if (this.transport !== sourceTransport || this.activePeer?.id !== peer.id) return;
-      await this.store.setMessageStatus(frame.messageId, "delivered");
+      const updated = await this.store.setMessageStatus(frame.messageId, "delivered");
+      if (updated) this.callbacks.onMessage(updated);
       this.callbacks.onChange();
       return;
     }
@@ -336,7 +344,8 @@ export class MessagingService {
     const incoming: ChatMessage = { ...frame, direction: "incoming", status: "delivered" };
     if (this.transport !== sourceTransport || this.activePeer?.id !== peer.id) return;
     await this.persistPeer(peer);
-    await this.store.commitIncoming(incoming);
+    const committed = await this.store.commitIncoming(incoming);
+    if (committed.inserted) this.callbacks.onMessage(committed.message);
     const ack = createAcknowledgement({
       messageId: frame.id,
       fromPeerId: local.id,
