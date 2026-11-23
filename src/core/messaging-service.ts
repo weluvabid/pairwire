@@ -20,6 +20,8 @@ export class MessagingService {
   private processing = Promise.resolve();
   private readonly pendingFramesByTransport = new Map<WebRtcTransport, number>();
   private readonly flushPromises = new Map<string, { transport: WebRtcTransport; promise: Promise<void> }>();
+  private readonly connectionWork = new WeakMap<WebRtcTransport, Promise<void>>();
+  private readonly announcedConnections = new WeakSet<WebRtcTransport>();
 
   constructor(store: PairwireStore, callbacks: MessagingCallbacks) {
     this.store = store;
@@ -217,13 +219,35 @@ export class MessagingService {
   }
 
   private async onConnected(): Promise<void> {
+    const transport = this.transport;
     const peer = this.activePeer;
-    if (peer) {
+    if (!transport || !peer || transport.connectionState !== "connected") return;
+
+    // Both the data-channel state event and remote-identity callback can observe
+    // the same successful handshake. Share one operation per transport so peer
+    // persistence, the success notice, and outbox recovery happen exactly once.
+    const existing = this.connectionWork.get(transport);
+    if (existing) return existing;
+
+    const work = (async () => {
+      if (this.transport !== transport || this.activePeer?.id !== peer.id || transport.connectionState !== "connected") return;
       await this.persistPeer(peer);
-      this.callbacks.onNotice(`Connected to ${peer.name || "peer"}.`, "info");
+      if (this.transport !== transport || this.activePeer?.id !== peer.id || transport.connectionState !== "connected") return;
+      if (!this.announcedConnections.has(transport)) {
+        this.announcedConnections.add(transport);
+        this.callbacks.onNotice(`Connected to ${peer.name || "peer"}.`, "info");
+      }
+      await this.flushOutbox();
+      this.callbacks.onChange();
+    })();
+    this.connectionWork.set(transport, work);
+    try {
+      await work;
+    } finally {
+      // Keep successful work cached for this transport; remove failed work so
+      // a later valid lifecycle callback can retry persistence/flush.
+      if (!this.announcedConnections.has(transport)) this.connectionWork.delete(transport);
     }
-    await this.flushOutbox();
-    this.callbacks.onChange();
   }
 
   private async flushOutbox(): Promise<void> {

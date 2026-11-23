@@ -31,6 +31,7 @@ function App() {
   const [localPeer, setLocalPeer] = useState<PeerIdentity | null>(null);
   const [initialized, setInitialized] = useState(false);
   const [startupError, setStartupError] = useState<string | null>(null);
+  const [startupAttempt, setStartupAttempt] = useState(0);
   const [peers, setPeers] = useState<PeerRecord[]>([]);
   const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Awaited<ReturnType<typeof messaging.getConversations>>>([]);
@@ -57,6 +58,7 @@ function App() {
   const busyActionRef = useRef<string | null>(null);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [historyScrolled, setHistoryScrolled] = useState(false);
   const historyRef = useRef<HTMLDivElement | null>(null);
   const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const lastRenderedConversation = useRef<string | null>(null);
@@ -72,14 +74,11 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (connectionState !== "connected" || !connectedPeer) return;
-    if (pairingPhase) {
-      setPairingPhase(null);
-      setPairingOpen(false);
-      setReconnectPeerId(null);
-      showToast(`Connected to ${connectedPeer.name}.`, "info");
-    }
-  }, [pairingPhase, connectionState, connectedPeer?.id, connectedPeer?.name, showToast]);
+    if (connectionState !== "connected" || !connectedPeer || !pairingPhase) return;
+    setPairingPhase(null);
+    setPairingOpen(false);
+    setReconnectPeerId(null);
+  }, [pairingPhase, connectionState, connectedPeer?.id]);
 
 
   useEffect(() => {
@@ -93,36 +92,39 @@ function App() {
 
   useEffect(() => {
     if (!("RTCPeerConnection" in window)) {
-      const message = "This browser does not support WebRTC data channels.";
-      setStartupError(message);
-      showToast(message, "error");
+      setStartupError("This browser does not support WebRTC data channels.");
       return;
     }
     if (!("indexedDB" in window)) {
-      const message = "This browser does not support local message storage.";
-      setStartupError(message);
-      showToast(message, "error");
+      setStartupError("This browser does not support local message storage.");
       return;
     }
     let cancelled = false;
-    void messaging.initialize().then(async (identity) => {
+    setInitialized(false);
+    setStartupError(null);
+    void (async () => {
+      const identity = await messaging.initialize();
+      const [storedName, storedPeers, storedConversations, storedOutbox] = await Promise.all([
+        messaging.getStoredDisplayName(),
+        messaging.getPeers(),
+        messaging.getConversations(),
+        messaging.getOutbox(),
+      ]);
       if (cancelled) return;
       setLocalPeer(identity);
-      const [storedName, storedPeers] = await Promise.all([messaging.getStoredDisplayName(), messaging.getPeers()]);
-      if (cancelled) return;
+      setPeers(storedPeers);
+      setConversations(storedConversations);
+      setOutbox(storedOutbox);
       setSelectedPeerId(storedPeers[0]?.id ?? null);
       if (!storedName) setNameSetupOpen(true);
-      setStartupError(null);
       setInitialized(true);
-    }).catch((error: unknown) => {
+    })().catch((error: unknown) => {
       if (cancelled) return;
-      const message = error instanceof Error ? error.message : "Pairwire could not start.";
       setInitialized(false);
-      setStartupError(message);
-      showToast(message, "error");
+      setStartupError(error instanceof Error ? error.message : "Pairwire could not start.");
     });
     return () => { cancelled = true; };
-  }, [showToast]);
+  }, [startupAttempt]);
 
   useEffect(() => {
     if (!initialized) return;
@@ -132,12 +134,19 @@ function App() {
       setPeers(nextPeers);
       setConversations(nextConversations);
       setOutbox(nextOutbox);
-      if (connectedPeer) setSelectedPeerId(connectedPeer.id);
-      else if (selectedPeerId && !nextPeers.some((peer) => peer.id === selectedPeerId)) setSelectedPeerId(nextPeers[0]?.id ?? null);
+      // Refreshing message/peer data must not override an intentional
+      // conversation selection just because another peer is connected.
+      if (selectedPeerId && !nextPeers.some((peer) => peer.id === selectedPeerId)) setSelectedPeerId(nextPeers[0]?.id ?? null);
       else if (!selectedPeerId && nextPeers.length) setSelectedPeerId(nextPeers[0]!.id);
     }).catch((error: unknown) => showToast(error instanceof Error ? error.message : "Could not load conversations.", "error"));
     return () => { cancelled = true; };
-  }, [initialized, revision, connectedPeer?.id, selectedPeerId, showToast]);
+  }, [initialized, revision, selectedPeerId, showToast]);
+
+  // A newly established/replaced connection should open its conversation once.
+  // Subsequent message revisions must not steal selection from the user.
+  useEffect(() => {
+    if (connectionState === "connected" && connectedPeer) setSelectedPeerId(connectedPeer.id);
+  }, [connectionState, connectedPeer?.id]);
 
   const selectedPeer = useMemo(() => {
     const stored = peers.find((peer) => peer.id === selectedPeerId);
@@ -367,8 +376,8 @@ function App() {
       <div class="drawer-content app-content">
         <main class="main-panel">
           {!initialized ? startupError
-            ? <div class="flex flex-1 items-center justify-center p-6"><div class="alert alert-error max-w-lg" role="alert">{startupError}</div></div>
-            : <div class="flex flex-1 items-center justify-center"><span class="loading loading-spinner loading-md text-base-content/45" aria-label="Starting Pairwire" /></div>
+            ? <div class="flex flex-1 items-center justify-center p-6"><div class="alert alert-error max-w-lg" role="alert"><div class="flex flex-col gap-3"><span>{startupError}</span><button class="btn btn-sm" type="button" onClick={() => setStartupAttempt((attempt) => attempt + 1)}>Retry startup</button></div></div></div>
+            : <div class="flex flex-1 flex-col items-center justify-center gap-3" role="status" aria-live="polite"><span class="loading loading-spinner loading-md text-base-content/45" aria-hidden="true" /><span class="text-xs text-base-content/55">Preparing your conversations…</span></div>
             : <>
           <div class="mobile-context lg:hidden">
             <label htmlFor="pairwire-drawer" class="btn btn-ghost btn-square btn-sm" aria-label="Open conversations">☰</label>
@@ -382,10 +391,12 @@ function App() {
             <Welcome onCreate={openPairing} />
           ) : (
             <section class="chat-panel" aria-label="Conversation">
-              <div class="chat-history" ref={historyRef} aria-live="polite">
+              {(!isConnectedToSelection || pendingForSelection > 0) && <div class={`chat-notices ${historyScrolled ? "is-scrolled" : ""}`}>
+                {!isConnectedToSelection && <div class={`alert ${pairingNotice ? "alert-info" : "alert-warning"} mx-auto max-w-xl text-xs`} role="status" aria-live="polite"><span>{pairingNotice ?? `${selectedPeer.name} is disconnected. Your local history is safe; reconnect to continue this conversation.`}</span></div>}
+                {pendingForSelection > 0 && <div class="alert alert-info mx-auto max-w-xl text-xs"><span>{pendingForSelection} {pendingForSelection === 1 ? "message is" : "messages are"} waiting for delivery. They will be retried when you reconnect.</span></div>}
+              </div>}
+              <div class="chat-history" ref={historyRef} onScroll={(event) => setHistoryScrolled((event.currentTarget as HTMLDivElement).scrollTop > 0)} aria-live="polite">
                 <div class="history-start"><span /><p>{messages.length ? "Conversation history" : "This is the beginning of your conversation."}</p><span /></div>
-                {!isConnectedToSelection && <div class={`alert ${pairingNotice ? "alert-info" : "alert-warning"} mx-auto mb-4 max-w-xl text-xs`}><span>{pairingNotice ?? `${selectedPeer.name} is disconnected. Your local history is safe; reconnect to continue this conversation.`}</span></div>}
-                {pendingForSelection > 0 && <div class="alert alert-info mx-auto mb-4 max-w-xl text-xs"><span>{pendingForSelection} {pendingForSelection === 1 ? "message is" : "messages are"} waiting for delivery. They will be retried when you reconnect.</span></div>}
                 {messages.map((message) => <Message key={message.id} message={message} peerName={connectedPeer?.name ?? selectedPeer.name} onRetry={() => void withBusy(`retry:${message.id}`, () => messaging.retryMessage(message.id))} retryBusy={busyAction === `retry:${message.id}`} />)}
               </div>
               <div class="composer-wrap">
@@ -421,17 +432,15 @@ function App() {
               const peerConnected = connectionState === "connected" && connectedPeer?.id === peer.id;
               const peerConnecting = reconnectPeerId === peer.id && connectionState === "connecting";
               const peerFailed = reconnectPeerId === peer.id && connectionState === "failed";
-              return <li key={peer.id} class="conversation-entry">
-                <div class={`conversation-row ${peer.id === selectedPeerId ? "is-selected" : ""}`}>
-                  <button type="button" class="conversation-select" aria-pressed={peer.id === selectedPeerId} onClick={() => { setSelectedPeerId(peer.id); setMobileDrawerOpen(false); }}>
-                    <div class="avatar placeholder conversation-avatar"><div><span>{initials(peer.name)}</span></div></div>
-                    <span class="conversation-copy"><span class="conversation-name">{peer.name}</span><span class="conversation-preview">{preview}</span></span>
-                    {queuedCount > 0 && <span class="badge badge-warning badge-xs" title={`${queuedCount} messages waiting for delivery`}>{queuedCount}</span>}
-                  </button>
-                  <div class="conversation-controls">
-                    <ConnectionDot peer={peer} connected={peerConnected} connecting={peerConnecting} failed={peerFailed} />
-                    <ConversationActions peerName={peer.name} connected={peerConnected} onReconnect={() => reconnectToPeer(peer)} onDetails={() => { setSelectedPeerId(peer.id); setMobileDrawerOpen(false); setDetailsOpen(true); }} onDelete={() => setDeleteTarget(peer)} />
-                  </div>
+              return <li key={peer.id} class={`conversation-entry ${peer.id === selectedPeerId ? "is-selected" : ""}`}>
+                <button type="button" class={`conversation-select ${peer.id === selectedPeerId ? "menu-active" : ""}`} aria-current={peer.id === selectedPeerId ? "page" : undefined} onClick={() => { setSelectedPeerId(peer.id); setMobileDrawerOpen(false); }}>
+                  <div class="avatar placeholder conversation-avatar"><div><span>{initials(peer.name)}</span></div></div>
+                  <span class="conversation-copy"><span class="conversation-name">{peer.name}</span><span class="conversation-preview">{preview}</span></span>
+                  {queuedCount > 0 && <span class="badge badge-warning badge-xs" title={`${queuedCount} messages waiting for delivery`}>{queuedCount}</span>}
+                </button>
+                <div class="conversation-controls">
+                  <ConnectionDot peer={peer} connected={peerConnected} connecting={peerConnecting} failed={peerFailed} />
+                  <ConversationActions peerName={peer.name} connected={peerConnected} onReconnect={() => reconnectToPeer(peer)} onDetails={() => { setSelectedPeerId(peer.id); setMobileDrawerOpen(false); setDetailsOpen(true); }} onDelete={() => setDeleteTarget(peer)} />
                 </div>
               </li>;
             })}
