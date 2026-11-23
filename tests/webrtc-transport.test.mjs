@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 import { WebRtcTransport } from '../.test-dist/transport/webrtc.js';
 import { decodeSignaling } from '../.test-dist/core/protocol.js';
 
-class FakeDataChannel {
+class FakeDataChannel extends EventTarget {
+  constructor() {
+    super();
+  }
+  bufferedAmount = 0;
+  bufferedAmountLowThreshold = 0;
   readyState = 'connecting';
   onopen = null;
   onclose = null;
@@ -12,10 +17,16 @@ class FakeDataChannel {
   sent = [];
   close() {
     this.readyState = 'closed';
+    this.dispatchEvent(new Event('close'));
   }
   send(data) {
     if (this.readyState !== 'open') throw new Error('channel is not open');
     this.sent.push(data);
+    this.bufferedAmount += new TextEncoder().encode(data).byteLength;
+  }
+  drain(amount = 0) {
+    this.bufferedAmount = amount;
+    this.dispatchEvent(new Event('bufferedamountlow'));
   }
   open() {
     this.readyState = 'open';
@@ -126,10 +137,10 @@ test('data channel rejects early sends and surfaces open, data, and close events
   await transport.createInvitation({ id: 'peer-a', name: 'A' });
   const connection = FakePeerConnection.instances[0];
   const channel = connection.channels[0];
-  assert.throws(() => transport.send('before-open'), /not ready/);
+  await assert.rejects(transport.send('before-open'), /not ready/);
 
   channel.open();
-  transport.send('hello');
+  await transport.send('hello');
   assert.deepEqual(channel.sent, ['hello']);
   assert.equal(transport.connectionState, 'connected');
 
@@ -216,4 +227,80 @@ test('ICE gathering completion between listener registration and state recheck i
   const transport = new WebRtcTransport(callbacks());
   const invitation = await transport.createInvitation({ id: 'peer-race', name: 'Race' });
   assert.equal(decodeSignaling(invitation, 'pairwire-invitation').peer.id, 'peer-race');
+});
+
+test('send queue applies backpressure and resumes below the low-water mark', async (context) => {
+  const previous = globalThis.RTCPeerConnection;
+  globalThis.RTCPeerConnection = FakePeerConnection;
+  FakePeerConnection.instances = [];
+  context.after(() => {
+    globalThis.RTCPeerConnection = previous;
+  });
+
+  const transport = new WebRtcTransport(callbacks());
+  await transport.createInvitation({ id: 'peer-buffer', name: 'Buffer' });
+  const channel = FakePeerConnection.instances[0].channels[0];
+  channel.open();
+  channel.bufferedAmount = 256 * 1024;
+
+  const first = transport.send('first');
+  const second = transport.send('second');
+  await Promise.resolve();
+  assert.deepEqual(channel.sent, [], 'frames wait while the buffer is above the high-water mark');
+  assert.equal(channel.bufferedAmountLowThreshold, 64 * 1024);
+
+  channel.drain(32 * 1024);
+  await Promise.all([first, second]);
+  assert.deepEqual(channel.sent, ['first', 'second']);
+
+  channel.bufferedAmount = 256 * 1024;
+  const interrupted = transport.send('interrupted');
+  await Promise.resolve();
+  transport.close();
+  await assert.rejects(interrupted, /closed while waiting/i);
+});
+
+test('closing a transport cancels pending ICE gathering', async (context) => {
+  const previous = globalThis.RTCPeerConnection;
+  class GatheringConnection extends FakePeerConnection {
+    iceGatheringState = 'gathering';
+    addEventListener(type, listener, options) {
+      super.addEventListener(type, listener, options);
+    }
+  }
+  globalThis.RTCPeerConnection = GatheringConnection;
+  GatheringConnection.instances = [];
+  context.after(() => {
+    globalThis.RTCPeerConnection = previous;
+  });
+
+  const transport = new WebRtcTransport(callbacks());
+  const invitation = transport.createInvitation({ id: 'peer-cancel', name: 'Cancel' });
+  await Promise.resolve();
+  await Promise.resolve();
+  transport.close();
+  await assert.rejects(invitation, /cancelled/i);
+  assert.equal(transport.connectionState, 'closed');
+});
+
+test('outgoing producer queue has a fixed capacity', async (context) => {
+  const previous = globalThis.RTCPeerConnection;
+  globalThis.RTCPeerConnection = FakePeerConnection;
+  FakePeerConnection.instances = [];
+  context.after(() => {
+    globalThis.RTCPeerConnection = previous;
+  });
+
+  const transport = new WebRtcTransport(callbacks());
+  await transport.createInvitation({ id: 'peer-capacity', name: 'Capacity' });
+  const channel = FakePeerConnection.instances[0].channels[0];
+  channel.open();
+  channel.bufferedAmount = 256 * 1024;
+
+  const queued = Array.from({ length: 256 }, (_, index) => transport.send(`message-${index}`));
+  await assert.rejects(transport.send('overflow'), /queue is full/i);
+  transport.close();
+  const results = await Promise.allSettled(queued);
+  assert.equal(results.length, 256);
+  assert.ok(results.every((result) => result.status === 'rejected'));
 });

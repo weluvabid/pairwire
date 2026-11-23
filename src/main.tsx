@@ -667,8 +667,17 @@ function App() {
                         >
                           <span>
                             {pairingNotice ??
-                              `${selectedPeer.name} is disconnected. Your local history is safe; reconnect to continue this conversation.`}
+                              `${selectedPeer.name} is disconnected. Your local history is safe.`}
                           </span>
+                          {!pairingNotice && (
+                            <button
+                              type="button"
+                              class="btn btn-ghost btn-sm shrink-0 font-semibold text-base-content hover:bg-base-300"
+                              onClick={() => reconnectToPeer(selectedPeer)}
+                            >
+                              Reconnect
+                            </button>
+                          )}
                         </div>
                       )}
                       {pendingForSelection > 0 && (
@@ -909,7 +918,7 @@ function App() {
                           </span>
                         )}
                       </button>
-                      <div class="conversation-controls">
+                      <ul class="conversation-controls">
                         <ConnectionDot
                           peer={peer}
                           connected={peerConnected}
@@ -927,7 +936,7 @@ function App() {
                           }}
                           onDelete={() => setDeleteTarget(peer)}
                         />
-                      </div>
+                      </ul>
                     </li>
                   );
                 })

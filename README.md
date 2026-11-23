@@ -100,7 +100,7 @@ MessagingService
         └── outbox
 ```
 
-The Preact UI renders application state and collects user input. Components are grouped by feature under `src/components`; UI lifecycle hooks live in `src/hooks`; clipboard access is isolated in `src/services`; and pure formatting/derived-data helpers live in `src/utils`. The UI calls `MessagingService` for pairing, messaging, connection state, and data retrieval; it does not implement transport or persistence semantics. `MessagingService` coordinates transport with persistence. `WebRtcTransport` exchanges frames and exposes connection lifecycle events; it does not decide whether a message was delivered. `PairwireStore` owns transactional local persistence. Protocol decoding rejects unsafe timestamps, malformed identifiers, and conflicting message-ID reuse. Incoming frame processing is bounded; if the receive backlog exceeds its limit, the transport closes without acknowledging queued frames so the sender can retry them after reconnecting.
+The Preact UI renders application state and collects user input. Components are grouped by feature under `src/components`; UI lifecycle hooks live in `src/hooks`; clipboard access is isolated in `src/services`; and pure formatting/derived-data helpers live in `src/utils`. The UI calls `MessagingService` for pairing, messaging, connection state, and data retrieval; it does not implement transport or persistence semantics. `MessagingService` coordinates transport with persistence. `WebRtcTransport` exchanges frames and exposes connection lifecycle events; it does not decide whether a message was delivered. `PairwireStore` owns transactional local persistence. Protocol decoding rejects unsafe timestamps, malformed identifiers, and conflicting message-ID reuse. Incoming frame processing is bounded; if the receive backlog exceeds its limit, the transport closes without acknowledging queued frames so the sender can retry them after reconnecting. Outgoing data-channel writes are serialized and use a 256 KiB high-water mark with a 64 KiB drain threshold, keeping concurrent message and acknowledgement producers within a bounded send queue.
 
 The signaling exchange uses a public STUN server to discover network candidates. STUN is not a messaging relay and does not receive chat contents, but it is an external connection-establishment dependency. Some restrictive networks may not establish a direct connection because Pairwire does not currently use a TURN relay.
 
@@ -117,8 +117,6 @@ npm run hygiene:check # Check final newlines and trailing whitespace
 npm run clean:test   # Remove temporary test compilation output
 ```
 
-npm with `package-lock.json` is the canonical package manager for this repository; install with `npm ci`. The unit tests use Node's built-in test runner. Tests compile source modules into the ignored `.test-dist/` directory, separate from the production site. The production build is bundled by Vite into `dist/`; it does not ship the test compilation output or TypeScript declaration files. Preact is the UI runtime; DaisyUI and Tailwind CSS are build-time styling dependencies.
-
 ## Scope and limitations
 
 - One active peer connection per browser tab; previous peer histories remain locally available.
@@ -134,7 +132,7 @@ npm with `package-lock.json` is the canonical package manager for this repositor
 
 Pairwire supports keyboard operation for conversation selection, conversation actions, native dialogs, and message composition. Use Tab and Shift+Tab to move between controls, Enter or Space to activate buttons, Escape to close dismissible dialogs and the mobile conversation drawer, and the arrow keys/Home/End inside a conversation actions menu. In the composer, Enter sends and Shift+Enter inserts a newline.
 
-The message history is independently scrollable and can receive keyboard focus. Reduced-motion preferences are respected. Accessibility should be checked in supported browsers with keyboard-only navigation and a screen reader before each release; automated type and unit tests do not replace that manual verification.
+Reduced-motion preferences are respected.
 
 ## License
 

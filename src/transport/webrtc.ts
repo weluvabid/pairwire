@@ -3,6 +3,10 @@ import type { ConnectionState, PeerIdentity, SignalingPayload } from '../core/ty
 
 const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 const GATHERING_TIMEOUT_MS = 20_000;
+const SEND_BUFFER_HIGH_WATER_BYTES = 256 * 1024;
+const SEND_BUFFER_LOW_WATER_BYTES = 64 * 1024;
+const SEND_DRAIN_TIMEOUT_MS = 15_000;
+const MAX_QUEUED_SENDS = 256;
 
 export interface TransportCallbacks {
   onStateChange(state: ConnectionState): void;
@@ -18,6 +22,9 @@ export class WebRtcTransport {
   private remotePeer: PeerIdentity | null = null;
   private state: ConnectionState = 'new';
   private readonly callbacks: TransportCallbacks;
+  private connectionAbort: AbortController | null = null;
+  private sendQueue: Promise<void> = Promise.resolve();
+  private queuedSends = 0;
 
   constructor(callbacks: TransportCallbacks) {
     this.callbacks = callbacks;
@@ -36,12 +43,21 @@ export class WebRtcTransport {
     this.role = 'initiator';
     this.setState('connecting');
     const connection = this.createConnection();
+    const signal = this.connectionAbort?.signal;
+
+    if (!signal) {
+      throw new Error('Connection setup was cancelled.');
+    }
+
     this.channel = connection.createDataChannel('pairwire', { ordered: true });
     this.bindChannel(this.channel);
 
     const offer = await connection.createOffer();
+    this.assertCurrentConnection(connection, signal);
     await connection.setLocalDescription(offer);
-    await waitForIceGathering(connection);
+    this.assertCurrentConnection(connection, signal);
+    await waitForIceGathering(connection, signal);
+    this.assertCurrentConnection(connection, signal);
     const description = connection.localDescription;
     if (!description?.sdp) throw new Error('The browser did not produce a connection description.');
 
@@ -72,10 +88,20 @@ export class WebRtcTransport {
     this.setState('connecting');
 
     const connection = this.createConnection();
+    const signal = this.connectionAbort?.signal;
+
+    if (!signal) {
+      throw new Error('Connection setup was cancelled.');
+    }
+
     await connection.setRemoteDescription(invitation.description);
+    this.assertCurrentConnection(connection, signal);
     const answer = await connection.createAnswer();
+    this.assertCurrentConnection(connection, signal);
     await connection.setLocalDescription(answer);
-    await waitForIceGathering(connection);
+    this.assertCurrentConnection(connection, signal);
+    await waitForIceGathering(connection, signal);
+    this.assertCurrentConnection(connection, signal);
     const description = connection.localDescription;
     if (!description?.sdp) throw new Error('The browser did not produce a connection response.');
 
@@ -105,16 +131,30 @@ export class WebRtcTransport {
         'That response belongs to a different peer. Your existing conversation was not changed.',
       );
     }
-    await this.connection.setRemoteDescription(response.description);
+    const connection = this.connection;
+    const signal = this.connectionAbort?.signal;
+    if (!signal) throw new Error('The pending connection was closed.');
+    await connection.setRemoteDescription(response.description);
+    this.assertCurrentConnection(connection, signal);
     this.remotePeer = response.peer;
     this.callbacks.onRemotePeer(response.peer);
   }
 
-  send(data: string): void {
-    if (!this.channel || this.channel.readyState !== 'open') {
-      throw new Error('The peer connection is not ready to send messages.');
+  send(data: string): Promise<void> {
+    // Serialize all producers through one bounded queue. Without this,
+    // concurrent callers can all observe a low bufferedAmount and overshoot it.
+    if (this.queuedSends >= MAX_QUEUED_SENDS) {
+      return Promise.reject(
+        new Error('The outgoing message queue is full. Retry after it drains.'),
+      );
     }
-    this.channel.send(data);
+    this.queuedSends += 1;
+    const operation = this.sendQueue.then(() => this.sendWhenReady(data));
+    const settled = operation.finally(() => {
+      this.queuedSends -= 1;
+    });
+    this.sendQueue = settled.catch(() => undefined);
+    return settled;
   }
 
   close(emitState = true): void {
@@ -122,6 +162,8 @@ export class WebRtcTransport {
     const connection = this.connection;
     this.channel = null;
     this.connection = null;
+    this.connectionAbort?.abort();
+    this.connectionAbort = null;
     this.role = null;
     this.remotePeer = null;
     if (channel) {
@@ -149,8 +191,33 @@ export class WebRtcTransport {
     if (emitState) this.callbacks.onStateChange('closed');
   }
 
+  private assertCurrentConnection(connection: RTCPeerConnection, signal: AbortSignal): void {
+    if (signal.aborted || this.connection !== connection) {
+      throw new Error('Connection setup was cancelled.');
+    }
+  }
+
+  private async sendWhenReady(data: string): Promise<void> {
+    const channel = this.channel;
+    if (!channel || channel.readyState !== 'open') {
+      throw new Error('The peer connection is not ready to send messages.');
+    }
+    const bytes = new TextEncoder().encode(data).byteLength;
+    if (bytes > SEND_BUFFER_HIGH_WATER_BYTES) {
+      throw new Error('The outgoing frame exceeds the transport buffer limit.');
+    }
+    if (channel.bufferedAmount + bytes > SEND_BUFFER_HIGH_WATER_BYTES) {
+      await waitForBufferedAmountLow(channel);
+    }
+    if (this.channel !== channel || channel.readyState !== 'open') {
+      throw new Error('The peer connection closed before the message could be sent.');
+    }
+    channel.send(data);
+  }
+
   private createConnection(): RTCPeerConnection {
     const connection = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    this.connectionAbort = new AbortController();
     this.connection = connection;
     connection.onconnectionstatechange = () => {
       const state = connection.connectionState;
@@ -202,7 +269,8 @@ export class WebRtcTransport {
   }
 }
 
-function waitForIceGathering(connection: RTCPeerConnection): Promise<void> {
+function waitForIceGathering(connection: RTCPeerConnection, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return Promise.reject(new Error('Connection setup was cancelled.'));
   if (connection.iceGatheringState === 'complete') return Promise.resolve();
 
   return new Promise((resolve, reject) => {
@@ -218,6 +286,7 @@ function waitForIceGathering(connection: RTCPeerConnection): Promise<void> {
     const cleanup = () => {
       clearTimeout(timeout);
       connection.removeEventListener('icegatheringstatechange', handleStateChange);
+      signal.removeEventListener('abort', handleAbort);
     };
     const finish = (error?: Error) => {
       if (settled) return;
@@ -229,10 +298,55 @@ function waitForIceGathering(connection: RTCPeerConnection): Promise<void> {
     const handleStateChange = () => {
       if (connection.iceGatheringState === 'complete') finish();
     };
+    const handleAbort = () => finish(new Error('Connection setup was cancelled.'));
 
     connection.addEventListener('icegatheringstatechange', handleStateChange);
+    signal.addEventListener('abort', handleAbort, { once: true });
     // Recheck after subscribing so completion cannot fall between the initial
     // state check and listener registration.
     handleStateChange();
+  });
+}
+
+function waitForBufferedAmountLow(channel: RTCDataChannel): Promise<void> {
+  if (channel.readyState !== 'open') {
+    return Promise.reject(new Error('The peer connection is not ready to send messages.'));
+  }
+  channel.bufferedAmountLowThreshold = SEND_BUFFER_LOW_WATER_BYTES;
+  if (channel.bufferedAmount <= SEND_BUFFER_LOW_WATER_BYTES) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeout = setTimeout(
+      () => finish(new Error('The outgoing message queue did not drain in time.')),
+      SEND_DRAIN_TIMEOUT_MS,
+    );
+    const cleanup = () => {
+      clearTimeout(timeout);
+      channel.removeEventListener('bufferedamountlow', handleLow);
+      channel.removeEventListener('close', handleClose);
+      channel.removeEventListener('error', handleError);
+    };
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else resolve();
+    };
+    const handleLow = () => {
+      if (channel.bufferedAmount <= SEND_BUFFER_LOW_WATER_BYTES) finish();
+    };
+    const handleClose = () =>
+      finish(new Error('The peer connection closed while waiting for the send buffer.'));
+    const handleError = () =>
+      finish(new Error('The peer connection failed while waiting for the send buffer.'));
+
+    channel.addEventListener('bufferedamountlow', handleLow);
+    channel.addEventListener('close', handleClose, { once: true });
+    channel.addEventListener('error', handleError, { once: true });
+    // Recheck after subscribing to avoid missing a drain between the initial
+    // amount check and listener registration.
+    handleLow();
   });
 }

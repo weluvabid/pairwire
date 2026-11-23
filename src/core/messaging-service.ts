@@ -359,7 +359,7 @@ export class MessagingService {
         text: message.text,
         createdAt: message.createdAt,
       };
-      transport.send(encodeFrame(wire));
+      await transport.send(encodeFrame(wire));
       const updated = await this.store.setMessageStatus(message.id, 'sent');
       if (updated) this.callbacks.onMessage(updated);
     } catch (error) {
@@ -417,7 +417,7 @@ export class MessagingService {
       this.activePeer?.id === peer.id &&
       sourceTransport.connectionState === 'connected'
     ) {
-      sourceTransport.send(encodeFrame(ack));
+      await sourceTransport.send(encodeFrame(ack));
     }
     this.callbacks.onChange();
   }
