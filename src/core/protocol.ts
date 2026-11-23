@@ -158,7 +158,7 @@ export function decodeSignaling(
   if (description["type"] !== (expectedType === "pairwire-invitation" ? "offer" : "answer")) {
     throw new ProtocolError("Pairing payload has an invalid WebRTC description type.");
   }
-  if (typeof description["sdp"] !== "string" || description["sdp"].length > MAX_SIGNALING_CHARS) {
+  if (typeof description["sdp"] !== "string" || !description["sdp"].trim() || description["sdp"].length > MAX_SIGNALING_CHARS) {
     throw new ProtocolError("Pairing payload has an invalid connection description.");
   }
 

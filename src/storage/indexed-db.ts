@@ -70,6 +70,28 @@ export class PairwireStore {
     return rows.sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id));
   }
 
+  async deleteConversation(peerId: string, conversationId: string): Promise<void> {
+    try {
+      await this.withStores([STORES.peers, STORES.conversations, STORES.messages, STORES.outbox], "readwrite", async (stores) => {
+        const peers = stores[STORES.peers];
+        const conversations = stores[STORES.conversations];
+        const messages = stores[STORES.messages];
+        const outbox = stores[STORES.outbox];
+        if (!peers || !conversations || !messages || !outbox) throw new StorageError("Storage schema is incomplete.");
+        const conversationMessages = await requestResult(messages.index("byConversation").getAll(conversationId) as IDBRequest<ChatMessage[]>);
+        const queuedMessages = await requestResult(outbox.getAll() as IDBRequest<ChatMessage[]>);
+        await requestResult(peers.delete(peerId));
+        await requestResult(conversations.delete(conversationId));
+        for (const message of conversationMessages) await requestResult(messages.delete(message.id));
+        for (const message of queuedMessages) {
+          if (message.toPeerId === peerId) await requestResult(outbox.delete(message.id));
+        }
+      });
+    } catch (error) {
+      throw wrapStorageError("Could not delete this conversation.", error);
+    }
+  }
+
   async createOutgoing(message: ChatMessage): Promise<void> {
     try {
       await this.withStores([STORES.messages, STORES.outbox, STORES.conversations], "readwrite", async (stores) => {

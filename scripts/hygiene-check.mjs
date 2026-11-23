@@ -2,7 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 
 const roots = ["src", "tests", "scripts"];
-const extensions = new Set([".ts", ".mjs", ".css", ".html", ".json", ".yml", ".md"]);
+const extensions = new Set([".ts", ".tsx", ".mjs", ".css", ".html", ".json", ".yml", ".md"]);
 const ignoredDirectories = new Set(["node_modules", "dist", ".git"]);
 const failures = [];
 
@@ -26,7 +26,7 @@ async function visit(path) {
 }
 
 for (const root of [...roots, ".github"]) await visit(root);
-for (const file of ["index.html", "styles.css", "README.md", "package.json", "tsconfig.json", "tsconfig.build.json", ".gitignore", ".npmrc", ".editorconfig", "LICENSE"]) {
+for (const file of ["index.html", "README.md", "vite.config.ts", "package.json", "tsconfig.json", "tsconfig.build.json", ".gitignore", ".npmrc", ".editorconfig", "LICENSE"]) {
   try {
     const content = await readFile(file, "utf8");
     if (!content.endsWith("\n")) failures.push(`${file}: missing final newline`);

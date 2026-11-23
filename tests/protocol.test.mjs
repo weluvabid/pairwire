@@ -84,4 +84,5 @@ test("manual signaling payloads validate role, version, peer, and SDP fields", (
   assert.throws(() => decodeSignaling(encoded, "pairwire-response"), /wrong step/);
   assert.throws(() => decodeSignaling(JSON.stringify({ ...invitation, version: 3 }), "pairwire-invitation"), /incompatible/);
   assert.throws(() => decodeSignaling(JSON.stringify({ ...invitation, description: { type: "answer", sdp: "x" } }), "pairwire-invitation"), /description type/);
+  assert.throws(() => decodeSignaling(JSON.stringify({ ...invitation, description: { type: "offer", sdp: "  " } }), "pairwire-invitation"), /connection description/);
 });

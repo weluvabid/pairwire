@@ -99,3 +99,44 @@ test("data channel rejects early sends and surfaces open, data, and close events
   transport.close();
   assert.equal(transport.connectionState, "closed");
 });
+
+
+test("reconnect signaling rejects a different peer identity without mutating the active conversation", async (context) => {
+  const previous = globalThis.RTCPeerConnection;
+  globalThis.RTCPeerConnection = FakePeerConnection;
+  FakePeerConnection.instances = [];
+  context.after(() => { globalThis.RTCPeerConnection = previous; });
+
+  const host = new WebRtcTransport(callbacks());
+  const invitation = await host.createInvitation({ id: "known-peer", name: "Known" });
+  const guest = new WebRtcTransport(callbacks());
+  const response = await guest.acceptInvitation(invitation, { id: "different-peer", name: "Different" });
+
+  await assert.rejects(
+    host.completePairing(response, "known-peer", "expected-peer"),
+    /different peer/i,
+  );
+  assert.equal(host.connectedPeer, null);
+  assert.equal(FakePeerConnection.instances[0].remoteDescription, null);
+});
+
+test("reconnect invitation can be constrained to the previously known peer", async (context) => {
+  const previous = globalThis.RTCPeerConnection;
+  globalThis.RTCPeerConnection = FakePeerConnection;
+  FakePeerConnection.instances = [];
+  context.after(() => { globalThis.RTCPeerConnection = previous; });
+
+  const host = new WebRtcTransport(callbacks());
+  const invitation = await host.createInvitation({ id: "known-peer", name: "Known" });
+  const guest = new WebRtcTransport(callbacks());
+  await guest.createInvitation({ id: "guest", name: "Guest" });
+
+  await assert.rejects(
+    guest.acceptInvitation(invitation, { id: "guest", name: "Guest" }, "different-peer"),
+    /different peer/i,
+  );
+  assert.equal(guest.connectionState, "connecting", "a mismatched invitation must not close the existing transport");
+
+  const response = await guest.acceptInvitation(invitation, { id: "guest", name: "Guest" }, "known-peer");
+  assert.equal(decodeSignaling(response, "pairwire-response").peer.id, "guest");
+});

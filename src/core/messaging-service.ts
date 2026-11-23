@@ -1,4 +1,4 @@
-import { createAcknowledgement, createWireMessage, decodeFrame, encodeFrame, ProtocolError } from "./protocol.js";
+import { createAcknowledgement, createWireMessage, decodeFrame, decodeSignaling, encodeFrame, ProtocolError } from "./protocol.js";
 import type { ChatMessage, MessageStatus, PeerIdentity, WireMessage } from "./types.js";
 import { conversationIdFor, MAX_TEXT_LENGTH } from "./types.js";
 import { PairwireStore } from "../storage/indexed-db.js";
@@ -53,16 +53,21 @@ export class MessagingService {
     return transport.createInvitation(local);
   }
 
-  async acceptInvitation(input: string): Promise<string> {
+  async acceptInvitation(input: string, expectedPeerId?: string): Promise<string> {
     const local = await this.ensureLocalPeer();
+    const invitation = decodeSignaling(input, "pairwire-invitation");
+    if (invitation.peer.id === local.id) throw new ProtocolError("You cannot pair with yourself.");
+    if (expectedPeerId && invitation.peer.id !== expectedPeerId) {
+      throw new ProtocolError("This invitation belongs to a different peer. Your existing conversation was not changed.");
+    }
     const transport = this.createTransport();
-    return transport.acceptInvitation(input, local);
+    return transport.acceptInvitation(input, local, expectedPeerId);
   }
 
-  async completePairing(input: string): Promise<void> {
+  async completePairing(input: string, expectedPeerId?: string): Promise<void> {
     const local = await this.ensureLocalPeer();
     if (!this.transport) throw new Error("Create an invitation before importing a response.");
-    await this.transport.completePairing(input, local.id);
+    await this.transport.completePairing(input, local.id, expectedPeerId);
     this.callbacks.onChange();
   }
 
@@ -113,6 +118,12 @@ export class MessagingService {
 
   async getOutbox(): Promise<ChatMessage[]> {
     return this.store.getOutbox();
+  }
+
+  async deleteConversation(peerId: string, conversationId: string): Promise<void> {
+    await this.store.deleteConversation(peerId, conversationId);
+    if (this.activePeer?.id === peerId) this.closeConnection();
+    this.callbacks.onChange();
   }
 
   async selectPeer(peer: PeerIdentity): Promise<void> {

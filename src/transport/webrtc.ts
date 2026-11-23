@@ -54,10 +54,13 @@ export class WebRtcTransport {
     return encodeSignaling(payload);
   }
 
-  async acceptInvitation(input: string, localPeer: PeerIdentity): Promise<string> {
-    this.close(false);
+  async acceptInvitation(input: string, localPeer: PeerIdentity, expectedPeerId?: string): Promise<string> {
     const invitation = decodeSignaling(input, "pairwire-invitation");
     if (invitation.peer.id === localPeer.id) throw new ProtocolError("You cannot pair with yourself.");
+    if (expectedPeerId && invitation.peer.id !== expectedPeerId) {
+      throw new ProtocolError("This invitation belongs to a different peer. Your existing conversation was not changed.");
+    }
+    this.close(false);
     this.role = "responder";
     this.remotePeer = invitation.peer;
     this.callbacks.onRemotePeer(invitation.peer);
@@ -80,12 +83,15 @@ export class WebRtcTransport {
     return encodeSignaling(payload);
   }
 
-  async completePairing(input: string, localPeerId: string): Promise<void> {
+  async completePairing(input: string, localPeerId: string, expectedPeerId?: string): Promise<void> {
     if (this.role !== "initiator" || !this.connection) {
       throw new Error("Create an invitation before importing a response.");
     }
     const response = decodeSignaling(input, "pairwire-response");
     if (response.peer.id === localPeerId) throw new ProtocolError("You cannot pair with yourself.");
+    if (expectedPeerId && response.peer.id !== expectedPeerId) {
+      throw new ProtocolError("That response belongs to a different peer. Your existing conversation was not changed.");
+    }
     this.remotePeer = response.peer;
     this.callbacks.onRemotePeer(response.peer);
     await this.connection.setRemoteDescription(response.description);
