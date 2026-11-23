@@ -1,9 +1,9 @@
-import { readdir, readFile } from "node:fs/promises";
-import { extname, join } from "node:path";
+import { readdir, readFile } from 'node:fs/promises';
+import { extname, join } from 'node:path';
 
-const roots = ["src", "tests", "scripts"];
-const extensions = new Set([".ts", ".tsx", ".mjs", ".css", ".html", ".json", ".yml", ".md"]);
-const ignoredDirectories = new Set(["node_modules", "dist", ".git"]);
+const roots = ['src', 'tests', 'scripts'];
+const extensions = new Set(['.ts', '.tsx', '.mjs', '.css', '.html', '.json', '.yml', '.md']);
+const ignoredDirectories = new Set(['node_modules', 'dist', '.git']);
 const failures = [];
 
 async function visit(path) {
@@ -18,25 +18,39 @@ async function visit(path) {
       if (!ignoredDirectories.has(entry.name)) await visit(join(path, entry.name));
     } else if (extensions.has(extname(entry.name))) {
       const file = join(path, entry.name);
-      const content = await readFile(file, "utf8");
-      if (!content.endsWith("\n")) failures.push(`${file}: missing final newline`);
+      const content = await readFile(file, 'utf8');
+      if (!content.endsWith('\n')) failures.push(`${file}: missing final newline`);
       if (/[ \t]+$/m.test(content)) failures.push(`${file}: trailing whitespace`);
     }
   }
 }
 
-for (const root of [...roots, ".github"]) await visit(root);
-for (const file of ["index.html", "README.md", "vite.config.ts", "package.json", "tsconfig.json", "tsconfig.build.json", "tsconfig.test.json", ".gitignore", ".npmrc", ".editorconfig", "LICENSE"]) {
+for (const root of [...roots, '.github']) await visit(root);
+for (const file of [
+  'index.html',
+  'README.md',
+  'vite.config.ts',
+  'package.json',
+  'tsconfig.json',
+  'tsconfig.build.json',
+  'tsconfig.test.json',
+  '.gitignore',
+  '.npmrc',
+  '.editorconfig',
+  'LICENSE',
+]) {
   try {
-    const content = await readFile(file, "utf8");
-    if (!content.endsWith("\n")) failures.push(`${file}: missing final newline`);
+    const content = await readFile(file, 'utf8');
+    if (!content.endsWith('\n')) failures.push(`${file}: missing final newline`);
     if (/[ \t]+$/m.test(content)) failures.push(`${file}: trailing whitespace`);
-  } catch { /* Optional during bootstrap. */ }
+  } catch {
+    /* Optional during bootstrap. */
+  }
 }
 
 if (failures.length) {
-  process.stderr.write(`${failures.join("\n")}\n`);
+  process.stderr.write(`${failures.join('\n')}\n`);
   process.exitCode = 1;
 } else {
-  process.stdout.write("Formatting hygiene checks passed.\n");
+  process.stdout.write('Formatting hygiene checks passed.\n');
 }

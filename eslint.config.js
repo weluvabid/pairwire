@@ -5,7 +5,6 @@ import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import tseslint from 'typescript-eslint';
 
-
 export default tseslint.config(
   {
     ignores: [
@@ -90,7 +89,6 @@ export default tseslint.config(
       'react/jsx-no-undef': 'error',
       'react/jsx-pascal-case': 'error',
       'react/no-danger': 'warn',
-      // Preact intentionally uses `class` and other Preact-supported DOM props.
       'react/no-unknown-property': 'off',
     },
   },

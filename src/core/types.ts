@@ -1,19 +1,14 @@
-export const PROTOCOL_NAME = "pairwire" as const;
+export const PROTOCOL_NAME = 'pairwire' as const;
 export const PROTOCOL_VERSION = 1 as const;
 export const MAX_TEXT_LENGTH = 8_000;
 export const MAX_FRAME_BYTES = 64 * 1024;
 export const MAX_SIGNALING_CHARS = 256 * 1024;
 
 export type ConnectionState =
-  | "new"
-  | "connecting"
-  | "connected"
-  | "disconnected"
-  | "failed"
-  | "closed";
+  'new' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed';
 
-export type MessageStatus = "pending" | "sending" | "sent" | "delivered" | "failed";
-export type MessageDirection = "incoming" | "outgoing";
+export type MessageStatus = 'pending' | 'sending' | 'sent' | 'delivered' | 'failed';
+export type MessageDirection = 'incoming' | 'outgoing';
 
 export interface PeerIdentity {
   id: string;
@@ -34,7 +29,7 @@ export interface ChatMessage {
 export interface WireMessage {
   protocol: typeof PROTOCOL_NAME;
   version: typeof PROTOCOL_VERSION;
-  type: "message";
+  type: 'message';
   id: string;
   conversationId: string;
   fromPeerId: string;
@@ -46,7 +41,7 @@ export interface WireMessage {
 export interface WireAcknowledgement {
   protocol: typeof PROTOCOL_NAME;
   version: typeof PROTOCOL_VERSION;
-  type: "ack";
+  type: 'ack';
   messageId: string;
   fromPeerId: string;
   toPeerId: string;
@@ -56,7 +51,7 @@ export interface WireAcknowledgement {
 export type WireFrame = WireMessage | WireAcknowledgement;
 
 export interface SignalingPayload {
-  type: "pairwire-invitation" | "pairwire-response";
+  type: 'pairwire-invitation' | 'pairwire-response';
   version: typeof PROTOCOL_VERSION;
   peer: PeerIdentity;
   description: RTCSessionDescriptionInit;
@@ -81,5 +76,5 @@ export interface SettingsRecord {
 }
 
 export function conversationIdFor(firstPeerId: string, secondPeerId: string): string {
-  return [firstPeerId, secondPeerId].sort().join(":");
+  return [firstPeerId, secondPeerId].sort().join(':');
 }

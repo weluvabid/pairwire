@@ -1,39 +1,35 @@
-import type { ChatMessage, MessageStatus } from "../core/types.js";
+import type { ChatMessage, MessageStatus } from '../core/types.js';
 
 const CONNECTION_LABELS: Record<string, string> = {
-  new: "No active connection",
-  connecting: "Establishing direct connection…",
-  connected: "Connected directly",
-  disconnected: "Connection interrupted",
-  failed: "Connection failed",
-  closed: "Connection closed",
+  new: 'No active connection',
+  connecting: 'Establishing direct connection…',
+  connected: 'Connected directly',
+  disconnected: 'Connection interrupted',
+  failed: 'Connection failed',
+  closed: 'Connection closed',
 };
 
-const TIME_FORMATTER = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+const TIME_FORMATTER = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' });
 
 const MESSAGE_STATUS_LABELS: Record<MessageStatus, string> = {
-  pending: "Queued",
-  sending: "Sending",
-  sent: "Sent · waiting for receipt",
-  delivered: "Delivered",
-  failed: "Not sent",
+  pending: 'Queued',
+  sending: 'Sending',
+  sent: 'Sent · waiting for receipt',
+  delivered: 'Delivered',
+  failed: 'Not sent',
 };
 
 export function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  return (parts.length === 1
-    ? parts[0]!.slice(0, 1)
-    : `${parts[0]!.slice(0, 1)}${parts.at(-1)!.slice(0, 1)}`
-  ).toLocaleUpperCase();
+  const firstWord = name.trim().split(/\s+/, 1)[0];
+  return firstWord ? firstWord.slice(0, 1).toLocaleUpperCase() : '?';
 }
 
 export function connectionDescription(state: string): string {
-  return CONNECTION_LABELS[state] ?? CONNECTION_LABELS["new"]!;
+  return CONNECTION_LABELS[state] ?? 'No active connection';
 }
 
 export function prettyTime(timestamp: number): string {
-  if (!isValidTimestamp(timestamp)) return "Unknown time";
+  if (!isValidTimestamp(timestamp)) return 'Unknown time';
   return TIME_FORMATTER.format(timestamp);
 }
 
@@ -45,15 +41,15 @@ function isValidTimestamp(value: number): boolean {
   return Number.isSafeInteger(value) && value >= 0 && value <= 8_640_000_000_000_000;
 }
 
-export function statusLabel(status: ChatMessage["status"]): string {
+export function statusLabel(status: ChatMessage['status']): string {
   return MESSAGE_STATUS_LABELS[status];
 }
 
 export function peerConnectionLabel(connected: boolean, state: string): string {
-  if (connected) return "Connected";
-  if (state === "connecting") return "Connecting";
-  if (state === "failed") return "Connection failed";
-  return "Disconnected";
+  if (connected) return 'Connected';
+  if (state === 'connecting') return 'Connecting';
+  if (state === 'failed') return 'Connection failed';
+  return 'Disconnected';
 }
 
 export function countPendingByPeer(messages: readonly ChatMessage[]): Map<string, number> {

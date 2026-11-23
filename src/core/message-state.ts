@@ -1,17 +1,17 @@
-import type { MessageStatus } from "./types.js";
+import type { MessageStatus } from './types.js';
 
 const validTransitions: Record<MessageStatus, ReadonlySet<MessageStatus>> = {
-  pending: new Set(["sending", "failed", "delivered"]),
-  sending: new Set(["sent", "pending", "failed", "delivered"]),
-  sent: new Set(["pending", "failed", "delivered"]),
+  pending: new Set(['sending', 'failed', 'delivered']),
+  sending: new Set(['sent', 'pending', 'failed', 'delivered']),
+  sent: new Set(['pending', 'failed', 'delivered']),
   delivered: new Set(),
-  failed: new Set(["pending", "sending", "delivered"]),
+  failed: new Set(['pending', 'sending', 'delivered']),
 };
 
 export class InvalidMessageTransitionError extends Error {
   constructor(from: MessageStatus, to: MessageStatus) {
     super(`Invalid message state transition: ${from} -> ${to}`);
-    this.name = "InvalidMessageTransitionError";
+    this.name = 'InvalidMessageTransitionError';
   }
 }
 
@@ -25,5 +25,5 @@ export function transitionMessage(from: MessageStatus, to: MessageStatus): Messa
 }
 
 export function isTerminalStatus(status: MessageStatus): boolean {
-  return status === "delivered";
+  return status === 'delivered';
 }

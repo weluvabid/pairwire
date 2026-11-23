@@ -5,18 +5,55 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f7f8f8" />
     <link rel="icon" type="image/svg+xml" href="%BASE_URL%favicon.svg" />
-    <meta name="description" content="Pairwire is an experimental browser-based messaging app for direct peer-to-peer conversations. No accounts or messaging servers." />
+    <meta
+      name="description"
+      content="Pairwire is an experimental browser-based messaging app for direct peer-to-peer conversations. No accounts or messaging servers."
+    />
     <title>Pairwire — direct conversations</title>
   </head>
   <body>
     <style>
-      #app { min-height: 100vh; min-height: 100dvh; }
-      .pairwire-boot { display: grid; min-height: 100vh; min-height: 100dvh; place-content: center; justify-items: center; gap: .75rem; color: #626d73; font: 13px/1.5 system-ui, sans-serif; }
-      .pairwire-boot-spinner { width: 1.5rem; height: 1.5rem; border: 2px solid #e8ebed; border-top-color: #626d73; border-radius: 50%; animation: pairwire-boot-spin .8s linear infinite; }
-      @keyframes pairwire-boot-spin { to { transform: rotate(360deg); } }
-      @media (prefers-reduced-motion: reduce) { .pairwire-boot-spinner { animation-duration: 2s; } }
+      #app {
+        min-height: 100vh;
+        min-height: 100dvh;
+      }
+      .pairwire-boot {
+        display: grid;
+        min-height: 100vh;
+        min-height: 100dvh;
+        place-content: center;
+        justify-items: center;
+        gap: 0.75rem;
+        color: #626d73;
+        font:
+          13px/1.5 system-ui,
+          sans-serif;
+      }
+      .pairwire-boot-spinner {
+        width: 1.5rem;
+        height: 1.5rem;
+        border: 2px solid #e8ebed;
+        border-top-color: #626d73;
+        border-radius: 50%;
+        animation: pairwire-boot-spin 0.8s linear infinite;
+      }
+      @keyframes pairwire-boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .pairwire-boot-spinner {
+          animation-duration: 2s;
+        }
+      }
     </style>
-    <div id="app"><div class="pairwire-boot" role="status" aria-live="polite"><span class="pairwire-boot-spinner" aria-hidden="true"></span><span>Starting Pairwire…</span></div></div>
+    <div id="app">
+      <div class="pairwire-boot" role="status" aria-live="polite">
+        <span class="pairwire-boot-spinner" aria-hidden="true"></span
+        ><span>Starting Pairwire…</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -1,7 +1,7 @@
-import { decodeSignaling, encodeSignaling, ProtocolError } from "../core/protocol.js";
-import type { ConnectionState, PeerIdentity, SignalingPayload } from "../core/types.js";
+import { decodeSignaling, encodeSignaling, ProtocolError } from '../core/protocol.js';
+import type { ConnectionState, PeerIdentity, SignalingPayload } from '../core/types.js';
 
-const ICE_SERVERS: RTCIceServer[] = [{ urls: "stun:stun.l.google.com:19302" }];
+const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 const GATHERING_TIMEOUT_MS = 20_000;
 
 export interface TransportCallbacks {
@@ -14,9 +14,9 @@ export interface TransportCallbacks {
 export class WebRtcTransport {
   private connection: RTCPeerConnection | null = null;
   private channel: RTCDataChannel | null = null;
-  private role: "initiator" | "responder" | null = null;
+  private role: 'initiator' | 'responder' | null = null;
   private remotePeer: PeerIdentity | null = null;
-  private state: ConnectionState = "new";
+  private state: ConnectionState = 'new';
   private readonly callbacks: TransportCallbacks;
 
   constructor(callbacks: TransportCallbacks) {
@@ -33,20 +33,20 @@ export class WebRtcTransport {
 
   async createInvitation(localPeer: PeerIdentity): Promise<string> {
     this.close(false);
-    this.role = "initiator";
-    this.setState("connecting");
+    this.role = 'initiator';
+    this.setState('connecting');
     const connection = this.createConnection();
-    this.channel = connection.createDataChannel("pairwire", { ordered: true });
+    this.channel = connection.createDataChannel('pairwire', { ordered: true });
     this.bindChannel(this.channel);
 
     const offer = await connection.createOffer();
     await connection.setLocalDescription(offer);
     await waitForIceGathering(connection);
     const description = connection.localDescription;
-    if (!description?.sdp) throw new Error("The browser did not produce a connection description.");
+    if (!description?.sdp) throw new Error('The browser did not produce a connection description.');
 
     const payload: SignalingPayload = {
-      type: "pairwire-invitation",
+      type: 'pairwire-invitation',
       version: 1,
       peer: localPeer,
       description: { type: description.type, sdp: description.sdp },
@@ -54,15 +54,22 @@ export class WebRtcTransport {
     return encodeSignaling(payload);
   }
 
-  async acceptInvitation(input: string, localPeer: PeerIdentity, expectedPeerId?: string): Promise<string> {
-    const invitation = decodeSignaling(input, "pairwire-invitation");
-    if (invitation.peer.id === localPeer.id) throw new ProtocolError("You cannot pair with yourself.");
+  async acceptInvitation(
+    input: string,
+    localPeer: PeerIdentity,
+    expectedPeerId?: string,
+  ): Promise<string> {
+    const invitation = decodeSignaling(input, 'pairwire-invitation');
+    if (invitation.peer.id === localPeer.id)
+      throw new ProtocolError('You cannot pair with yourself.');
     if (expectedPeerId && invitation.peer.id !== expectedPeerId) {
-      throw new ProtocolError("This invitation belongs to a different peer. Your existing conversation was not changed.");
+      throw new ProtocolError(
+        'This invitation belongs to a different peer. Your existing conversation was not changed.',
+      );
     }
     this.close(false);
-    this.role = "responder";
-    this.setState("connecting");
+    this.role = 'responder';
+    this.setState('connecting');
 
     const connection = this.createConnection();
     await connection.setRemoteDescription(invitation.description);
@@ -70,12 +77,12 @@ export class WebRtcTransport {
     await connection.setLocalDescription(answer);
     await waitForIceGathering(connection);
     const description = connection.localDescription;
-    if (!description?.sdp) throw new Error("The browser did not produce a connection response.");
+    if (!description?.sdp) throw new Error('The browser did not produce a connection response.');
 
     this.remotePeer = invitation.peer;
     this.callbacks.onRemotePeer(invitation.peer);
     const payload: SignalingPayload = {
-      type: "pairwire-response",
+      type: 'pairwire-response',
       version: 1,
       peer: localPeer,
       description: { type: description.type, sdp: description.sdp },
@@ -83,14 +90,20 @@ export class WebRtcTransport {
     return encodeSignaling(payload);
   }
 
-  async completePairing(input: string, localPeerId: string, expectedPeerId?: string): Promise<void> {
-    if (this.role !== "initiator" || !this.connection) {
-      throw new Error("Create an invitation before importing a response.");
+  async completePairing(
+    input: string,
+    localPeerId: string,
+    expectedPeerId?: string,
+  ): Promise<void> {
+    if (this.role !== 'initiator' || !this.connection) {
+      throw new Error('Create an invitation before importing a response.');
     }
-    const response = decodeSignaling(input, "pairwire-response");
-    if (response.peer.id === localPeerId) throw new ProtocolError("You cannot pair with yourself.");
+    const response = decodeSignaling(input, 'pairwire-response');
+    if (response.peer.id === localPeerId) throw new ProtocolError('You cannot pair with yourself.');
     if (expectedPeerId && response.peer.id !== expectedPeerId) {
-      throw new ProtocolError("That response belongs to a different peer. Your existing conversation was not changed.");
+      throw new ProtocolError(
+        'That response belongs to a different peer. Your existing conversation was not changed.',
+      );
     }
     await this.connection.setRemoteDescription(response.description);
     this.remotePeer = response.peer;
@@ -98,8 +111,8 @@ export class WebRtcTransport {
   }
 
   send(data: string): void {
-    if (!this.channel || this.channel.readyState !== "open") {
-      throw new Error("The peer connection is not ready to send messages.");
+    if (!this.channel || this.channel.readyState !== 'open') {
+      throw new Error('The peer connection is not ready to send messages.');
     }
     this.channel.send(data);
   }
@@ -132,8 +145,8 @@ export class WebRtcTransport {
         // The connection can already be closed by the browser.
       }
     }
-    this.state = "closed";
-    if (emitState) this.callbacks.onStateChange("closed");
+    this.state = 'closed';
+    if (emitState) this.callbacks.onStateChange('closed');
   }
 
   private createConnection(): RTCPeerConnection {
@@ -141,18 +154,18 @@ export class WebRtcTransport {
     this.connection = connection;
     connection.onconnectionstatechange = () => {
       const state = connection.connectionState;
-      if (state === "connected") {
-        if (this.channel?.readyState === "open") this.setState("connected");
-      } else if (state === "connecting" || state === "new") this.setState("connecting");
-      else if (state === "disconnected") this.setState("disconnected");
-      else if (state === "failed") this.setState("failed");
-      else if (state === "closed") this.setState("closed");
+      if (state === 'connected') {
+        if (this.channel?.readyState === 'open') this.setState('connected');
+      } else if (state === 'connecting' || state === 'new') this.setState('connecting');
+      else if (state === 'disconnected') this.setState('disconnected');
+      else if (state === 'failed') this.setState('failed');
+      else if (state === 'closed') this.setState('closed');
     };
     connection.oniceconnectionstatechange = () => {
-      if (connection.iceConnectionState === "failed") this.setState("failed");
+      if (connection.iceConnectionState === 'failed') this.setState('failed');
     };
     connection.ondatachannel = (event) => {
-      if (this.role !== "responder") {
+      if (this.role !== 'responder') {
         event.channel.close();
         return;
       }
@@ -167,14 +180,15 @@ export class WebRtcTransport {
   }
 
   private bindChannel(channel: RTCDataChannel): void {
-    channel.onopen = () => this.setState("connected");
+    channel.onopen = () => this.setState('connected');
     channel.onclose = () => {
-      if (this.state !== "closed" && this.state !== "failed") this.setState("disconnected");
+      if (this.state !== 'closed' && this.state !== 'failed') this.setState('disconnected');
     };
-    channel.onerror = () => this.callbacks.onError(new Error("The WebRTC data channel reported an error."));
+    channel.onerror = () =>
+      this.callbacks.onError(new Error('The WebRTC data channel reported an error.'));
     channel.onmessage = (event: MessageEvent<unknown>) => {
-      if (typeof event.data !== "string") {
-        this.callbacks.onError(new Error("Received a message in an unsupported data format."));
+      if (typeof event.data !== 'string') {
+        this.callbacks.onError(new Error('Received a message in an unsupported data format.'));
         return;
       }
       this.callbacks.onData(event.data);
@@ -189,15 +203,21 @@ export class WebRtcTransport {
 }
 
 function waitForIceGathering(connection: RTCPeerConnection): Promise<void> {
-  if (connection.iceGatheringState === "complete") return Promise.resolve();
+  if (connection.iceGatheringState === 'complete') return Promise.resolve();
 
   return new Promise((resolve, reject) => {
     let settled = false;
-    const timeout = setTimeout(() => finish(new Error("Gathering connection candidates timed out. Check your network and retry.")), GATHERING_TIMEOUT_MS);
+    const timeout = setTimeout(
+      () =>
+        finish(
+          new Error('Gathering connection candidates timed out. Check your network and retry.'),
+        ),
+      GATHERING_TIMEOUT_MS,
+    );
 
     const cleanup = () => {
       clearTimeout(timeout);
-      connection.removeEventListener("icegatheringstatechange", handleStateChange);
+      connection.removeEventListener('icegatheringstatechange', handleStateChange);
     };
     const finish = (error?: Error) => {
       if (settled) return;
@@ -207,10 +227,10 @@ function waitForIceGathering(connection: RTCPeerConnection): Promise<void> {
       else resolve();
     };
     const handleStateChange = () => {
-      if (connection.iceGatheringState === "complete") finish();
+      if (connection.iceGatheringState === 'complete') finish();
     };
 
-    connection.addEventListener("icegatheringstatechange", handleStateChange);
+    connection.addEventListener('icegatheringstatechange', handleStateChange);
     // Recheck after subscribing so completion cannot fall between the initial
     // state check and listener registration.
     handleStateChange();

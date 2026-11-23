@@ -40,8 +40,6 @@ To build the static site without starting the server:
 npm run build
 ```
 
-The generated static site lives in `dist/` and can be hosted by any static-file host that serves HTTPS. Pairwire does not need an application server at runtime. For a production deployment, publish the *contents* of `dist/`.
-
 ## Pair two browsers
 
 1. Open Pairwire in two browser contexts. They can be two browsers or one normal window and one private window.
@@ -59,13 +57,13 @@ To continue an existing conversation, choose its **Reconnect** action. Pairwire 
 
 Pairwire does not equate a successful `RTCDataChannel.send()` call with delivery.
 
-| State | Meaning |
-| --- | --- |
-| Pending | Saved locally and waiting for a transmission attempt. |
-| Sending | A transmission attempt is in progress. |
-| Sent | The browser accepted the frame for transmission; remote persistence is not confirmed yet. |
-| Delivered | The remote app committed the message to IndexedDB and sent an acknowledgement. |
-| Failed | The latest attempt failed. The message stays in the local outbox and can be retried. |
+| State     | Meaning                                                                                   |
+| --------- | ----------------------------------------------------------------------------------------- |
+| Pending   | Saved locally and waiting for a transmission attempt.                                     |
+| Sending   | A transmission attempt is in progress.                                                    |
+| Sent      | The browser accepted the frame for transmission; remote persistence is not confirmed yet. |
+| Delivered | The remote app committed the message to IndexedDB and sent an acknowledgement.            |
+| Failed    | The latest attempt failed. The message stays in the local outbox and can be retried.      |
 
 If a connection drops after the remote side saves a message but before the acknowledgement arrives, the sender may transmit it again. The receiver checks the stable message ID transactionally and re-acknowledges duplicates without adding another conversation entry. This gives at-least-once transmission attempts with idempotent receive processing; it does not promise exactly-once network delivery.
 

@@ -1,15 +1,23 @@
-import { createAcknowledgement, createWireMessage, decodeFrame, decodeSignaling, encodeFrame, ProtocolError } from "./protocol.js";
-import type { ChatMessage, PeerIdentity, WireMessage } from "./types.js";
-import { conversationIdFor, MAX_TEXT_LENGTH } from "./types.js";
-import { PairwireStore } from "../storage/indexed-db.js";
-import { WebRtcTransport } from "../transport/webrtc.js";
+import {
+  createAcknowledgement,
+  createWireMessage,
+  decodeFrame,
+  decodeSignaling,
+  encodeFrame,
+  ProtocolError,
+} from './protocol.js';
+import type { ChatMessage, PeerIdentity, WireMessage } from './types.js';
+import { conversationIdFor, MAX_TEXT_LENGTH } from './types.js';
+import type { PairwireStore } from '../storage/indexed-db.js';
+import { containsControlCharacters } from '../utils/text-validation.js';
+import { WebRtcTransport } from '../transport/webrtc.js';
 
 const MAX_QUEUED_INCOMING_FRAMES = 256;
 
 export interface MessagingCallbacks {
   onChange(): void;
   onMessage(message: ChatMessage): void;
-  onNotice(message: string, kind?: "info" | "error"): void;
+  onNotice(message: string, kind?: 'info' | 'error'): void;
 }
 
 export class MessagingService {
@@ -20,7 +28,10 @@ export class MessagingService {
   private activePeer: PeerIdentity | null = null;
   private processing = Promise.resolve();
   private readonly pendingFramesByTransport = new Map<WebRtcTransport, number>();
-  private readonly flushPromises = new Map<string, { transport: WebRtcTransport; promise: Promise<void> }>();
+  private readonly flushPromises = new Map<
+    string,
+    { transport: WebRtcTransport; promise: Promise<void> }
+  >();
   private readonly connectionWork = new WeakMap<WebRtcTransport, Promise<void>>();
   private readonly announcedConnections = new WeakSet<WebRtcTransport>();
 
@@ -30,7 +41,7 @@ export class MessagingService {
   }
 
   get connectionState(): string {
-    return this.transport?.connectionState ?? "new";
+    return this.transport?.connectionState ?? 'new';
   }
 
   get connectedPeer(): PeerIdentity | null {
@@ -52,8 +63,8 @@ export class MessagingService {
 
   async updateDisplayName(name: string): Promise<PeerIdentity> {
     const normalized = name.trim();
-    if (!normalized || normalized.length > 48 || /[\u0000-\u001f\u007f]/.test(normalized)) {
-      throw new Error("Display names must contain 1–48 visible characters.");
+    if (!normalized || normalized.length > 48 || containsControlCharacters(normalized)) {
+      throw new Error('Display names must contain 1–48 visible characters.');
     }
     await this.store.setDisplayName(normalized);
     if (!this.localPeer) return this.initialize();
@@ -74,10 +85,12 @@ export class MessagingService {
 
   async acceptInvitation(input: string, expectedPeerId?: string): Promise<string> {
     const local = await this.ensureLocalPeer();
-    const invitation = decodeSignaling(input, "pairwire-invitation");
-    if (invitation.peer.id === local.id) throw new ProtocolError("You cannot pair with yourself.");
+    const invitation = decodeSignaling(input, 'pairwire-invitation');
+    if (invitation.peer.id === local.id) throw new ProtocolError('You cannot pair with yourself.');
     if (expectedPeerId && invitation.peer.id !== expectedPeerId) {
-      throw new ProtocolError("This invitation belongs to a different peer. Your existing conversation was not changed.");
+      throw new ProtocolError(
+        'This invitation belongs to a different peer. Your existing conversation was not changed.',
+      );
     }
     const transport = this.createTransport();
     try {
@@ -91,14 +104,16 @@ export class MessagingService {
   async completePairing(input: string, expectedPeerId?: string): Promise<void> {
     const local = await this.ensureLocalPeer();
     const transport = this.transport;
-    if (!transport) throw new Error("Create an invitation before importing a response.");
+    if (!transport) throw new Error('Create an invitation before importing a response.');
 
     // Validate user-supplied signaling before entering the transport mutation path.
     // A malformed or mismatched clipboard value must not destroy a valid pending offer.
-    const response = decodeSignaling(input, "pairwire-response");
-    if (response.peer.id === local.id) throw new ProtocolError("You cannot pair with yourself.");
+    const response = decodeSignaling(input, 'pairwire-response');
+    if (response.peer.id === local.id) throw new ProtocolError('You cannot pair with yourself.');
     if (expectedPeerId && response.peer.id !== expectedPeerId) {
-      throw new ProtocolError("That response belongs to a different peer. Your existing conversation was not changed.");
+      throw new ProtocolError(
+        'That response belongs to a different peer. Your existing conversation was not changed.',
+      );
     }
 
     try {
@@ -113,11 +128,11 @@ export class MessagingService {
   async sendMessage(text: string): Promise<ChatMessage> {
     const local = await this.ensureLocalPeer();
     const peer = this.activePeer;
-    if (!peer || this.connectionState !== "connected") {
-      throw new Error("Connect to a peer before sending a message.");
+    if (!peer || this.connectionState !== 'connected') {
+      throw new Error('Connect to a peer before sending a message.');
     }
     const normalized = text.trim();
-    if (!normalized) throw new Error("Write a message first.");
+    if (!normalized) throw new Error('Write a message first.');
     if (normalized.length > MAX_TEXT_LENGTH) {
       throw new Error(`Messages must be ${MAX_TEXT_LENGTH.toLocaleString()} characters or fewer.`);
     }
@@ -130,7 +145,7 @@ export class MessagingService {
       text: normalized,
       createdAt,
     });
-    const message: ChatMessage = { ...wire, direction: "outgoing", status: "pending" };
+    const message: ChatMessage = { ...wire, direction: 'outgoing', status: 'pending' };
     await this.store.createOutgoing(message);
     this.callbacks.onMessage(message);
     this.callbacks.onChange();
@@ -139,7 +154,8 @@ export class MessagingService {
   }
 
   async retryMessage(id: string): Promise<void> {
-    if (this.connectionState !== "connected") throw new Error("Reconnect before retrying this message.");
+    if (this.connectionState !== 'connected')
+      throw new Error('Reconnect before retrying this message.');
     const updated = await this.store.retryMessage(id);
     if (updated) await this.transmit(updated);
   }
@@ -177,45 +193,58 @@ export class MessagingService {
   private createTransport(): WebRtcTransport {
     this.transport?.close(false);
     this.activePeer = null;
-    let transport!: WebRtcTransport;
-    transport = new WebRtcTransport({
+    const transportRef: { current: WebRtcTransport | null } = { current: null };
+    const transport = new WebRtcTransport({
       onStateChange: (state) => {
-        if (state === "connected") {
-          void this.onConnected().catch((error: unknown) => this.callbacks.onNotice(errorMessage(error), "error"));
+        if (state === 'connected') {
+          void this.onConnected().catch((error: unknown) =>
+            this.callbacks.onNotice(errorMessage(error), 'error'),
+          );
         }
-        if (state === "failed" || state === "disconnected") {
-          this.callbacks.onNotice("Connection interrupted. Pending messages stay on this device.", "info");
+        if (state === 'failed' || state === 'disconnected') {
+          this.callbacks.onNotice(
+            'Connection interrupted. Pending messages stay on this device.',
+            'info',
+          );
         }
         this.callbacks.onChange();
       },
       onData: (data) => {
-        if (this.transport !== transport) return;
-        const pending = this.pendingFramesByTransport.get(transport) ?? 0;
+        const currentTransport = transportRef.current;
+        if (!currentTransport || this.transport !== currentTransport) return;
+        const pending = this.pendingFramesByTransport.get(currentTransport) ?? 0;
         if (pending >= MAX_QUEUED_INCOMING_FRAMES) {
-          this.callbacks.onNotice("Incoming message backlog exceeded the safety limit. Reconnect to retry unacknowledged messages.", "error");
+          this.callbacks.onNotice(
+            'Incoming message backlog exceeded the safety limit. Reconnect to retry unacknowledged messages.',
+            'error',
+          );
           this.closeConnection();
           return;
         }
-        this.pendingFramesByTransport.set(transport, pending + 1);
+        this.pendingFramesByTransport.set(currentTransport, pending + 1);
         this.processing = this.processing
-          .then(() => this.handleFrame(data, transport))
-          .catch((error: unknown) => this.callbacks.onNotice(errorMessage(error), "error"))
+          .then(() => this.handleFrame(data, currentTransport))
+          .catch((error: unknown) => this.callbacks.onNotice(errorMessage(error), 'error'))
           .finally(() => {
-            const remaining = (this.pendingFramesByTransport.get(transport) ?? 1) - 1;
-            if (remaining > 0) this.pendingFramesByTransport.set(transport, remaining);
-            else this.pendingFramesByTransport.delete(transport);
+            const remaining = (this.pendingFramesByTransport.get(currentTransport) ?? 1) - 1;
+            if (remaining > 0) this.pendingFramesByTransport.set(currentTransport, remaining);
+            else this.pendingFramesByTransport.delete(currentTransport);
           });
       },
       onRemotePeer: (peer) => {
-        if (this.transport !== transport) return;
+        const currentTransport = transportRef.current;
+        if (!currentTransport || this.transport !== currentTransport) return;
         this.activePeer = peer;
         this.callbacks.onChange();
-        if (transport.connectionState === "connected") {
-          void this.onConnected().catch((error: unknown) => this.callbacks.onNotice(errorMessage(error), "error"));
+        if (currentTransport.connectionState === 'connected') {
+          void this.onConnected().catch((error: unknown) =>
+            this.callbacks.onNotice(errorMessage(error), 'error'),
+          );
         }
       },
-      onError: (error) => this.callbacks.onNotice(error.message, "error"),
+      onError: (error) => this.callbacks.onNotice(error.message, 'error'),
     });
+    transportRef.current = transport;
     this.transport = transport;
     return transport;
   }
@@ -223,7 +252,7 @@ export class MessagingService {
   private async onConnected(): Promise<void> {
     const transport = this.transport;
     const peer = this.activePeer;
-    if (!transport || !peer || transport.connectionState !== "connected") return;
+    if (!transport || !peer || transport.connectionState !== 'connected') return;
 
     // Both the data-channel state event and remote-identity callback can observe
     // the same successful handshake. Share one operation per transport so peer
@@ -232,12 +261,22 @@ export class MessagingService {
     if (existing) return existing;
 
     const work = (async () => {
-      if (this.transport !== transport || this.activePeer?.id !== peer.id || transport.connectionState !== "connected") return;
+      if (
+        this.transport !== transport ||
+        this.activePeer?.id !== peer.id ||
+        transport.connectionState !== 'connected'
+      )
+        return;
       await this.persistPeer(peer);
-      if (this.transport !== transport || this.activePeer?.id !== peer.id || transport.connectionState !== "connected") return;
+      if (
+        this.transport !== transport ||
+        this.activePeer?.id !== peer.id ||
+        transport.connectionState !== 'connected'
+      )
+        return;
       if (!this.announcedConnections.has(transport)) {
         this.announcedConnections.add(transport);
-        this.callbacks.onNotice(`Connected to ${peer.name || "peer"}.`, "info");
+        this.callbacks.onNotice(`Connected to ${peer.name || 'peer'}.`, 'info');
       }
       await this.flushOutbox();
       this.callbacks.onChange();
@@ -255,14 +294,19 @@ export class MessagingService {
   private async flushOutbox(): Promise<void> {
     const peer = this.activePeer;
     const transport = this.transport;
-    if (!peer || !transport || transport.connectionState !== "connected") return;
+    if (!peer || !transport || transport.connectionState !== 'connected') return;
     const existing = this.flushPromises.get(peer.id);
     if (existing?.transport === transport) return existing.promise;
 
     const run = (async () => {
       const messages = await this.store.getOutbox();
       for (const message of messages) {
-        if (this.transport !== transport || this.activePeer?.id !== peer.id || transport.connectionState !== "connected") break;
+        if (
+          this.transport !== transport ||
+          this.activePeer?.id !== peer.id ||
+          transport.connectionState !== 'connected'
+        )
+          break;
         if (message.toPeerId !== peer.id) continue;
         const reset = await this.store.retryMessage(message.id);
         if (reset) await this.transmit(reset, transport);
@@ -279,26 +323,35 @@ export class MessagingService {
 
   private async transmit(message: ChatMessage, expectedTransport = this.transport): Promise<void> {
     const transport = expectedTransport;
-    if (!transport || this.transport !== transport || this.activePeer?.id !== message.toPeerId || transport.connectionState !== "connected") {
-      const updated = await this.store.setMessageStatus(message.id, "pending");
+    if (
+      !transport ||
+      this.transport !== transport ||
+      this.activePeer?.id !== message.toPeerId ||
+      transport.connectionState !== 'connected'
+    ) {
+      const updated = await this.store.setMessageStatus(message.id, 'pending');
       if (updated) this.callbacks.onMessage(updated);
       this.callbacks.onChange();
       return;
     }
-    const sending = await this.store.setMessageStatus(message.id, "sending");
+    const sending = await this.store.setMessageStatus(message.id, 'sending');
     if (sending) this.callbacks.onMessage(sending);
     this.callbacks.onChange();
-    if (this.transport !== transport || this.activePeer?.id !== message.toPeerId || transport.connectionState !== "connected") {
-      const updated = await this.store.setMessageStatus(message.id, "pending");
+    if (
+      this.transport !== transport ||
+      this.activePeer?.id !== message.toPeerId ||
+      transport.connectionState !== 'connected'
+    ) {
+      const updated = await this.store.setMessageStatus(message.id, 'pending');
       if (updated) this.callbacks.onMessage(updated);
       this.callbacks.onChange();
       return;
     }
     try {
       const wire: WireMessage = {
-        protocol: "pairwire",
+        protocol: 'pairwire',
         version: 1,
-        type: "message",
+        type: 'message',
         id: message.id,
         conversationId: message.conversationId,
         fromPeerId: message.fromPeerId,
@@ -307,16 +360,16 @@ export class MessagingService {
         createdAt: message.createdAt,
       };
       transport.send(encodeFrame(wire));
-      const updated = await this.store.setMessageStatus(message.id, "sent");
+      const updated = await this.store.setMessageStatus(message.id, 'sent');
       if (updated) this.callbacks.onMessage(updated);
     } catch (error) {
       try {
-        const updated = await this.store.setMessageStatus(message.id, "failed");
+        const updated = await this.store.setMessageStatus(message.id, 'failed');
         if (updated) this.callbacks.onMessage(updated);
       } catch {
         // Preserve the original transport error; the message remains in the outbox.
       }
-      this.callbacks.onNotice(errorMessage(error), "error");
+      this.callbacks.onNotice(errorMessage(error), 'error');
     }
     this.callbacks.onChange();
   }
@@ -326,22 +379,29 @@ export class MessagingService {
     const local = await this.ensureLocalPeer();
     const frame = decodeFrame(input);
     const peer = sourceTransport.connectedPeer;
-    if (!peer || this.activePeer?.id !== peer.id) throw new ProtocolError("Received a frame before a peer was identified.");
+    if (!peer || this.activePeer?.id !== peer.id)
+      throw new ProtocolError('Received a frame before a peer was identified.');
     if (frame.toPeerId !== local.id || frame.fromPeerId !== peer.id) {
-      throw new ProtocolError("Received a frame for a different peer.");
+      throw new ProtocolError('Received a frame for a different peer.');
     }
 
-    if (frame.type === "ack") {
+    if (frame.type === 'ack') {
       const original = await this.store.getMessage(frame.messageId);
-      if (!original || original.direction !== "outgoing" || original.fromPeerId !== local.id || original.toPeerId !== frame.fromPeerId) return;
+      if (
+        !original ||
+        original.direction !== 'outgoing' ||
+        original.fromPeerId !== local.id ||
+        original.toPeerId !== frame.fromPeerId
+      )
+        return;
       if (this.transport !== sourceTransport || this.activePeer?.id !== peer.id) return;
-      const updated = await this.store.setMessageStatus(frame.messageId, "delivered");
+      const updated = await this.store.setMessageStatus(frame.messageId, 'delivered');
       if (updated) this.callbacks.onMessage(updated);
       this.callbacks.onChange();
       return;
     }
 
-    const incoming: ChatMessage = { ...frame, direction: "incoming", status: "delivered" };
+    const incoming: ChatMessage = { ...frame, direction: 'incoming', status: 'delivered' };
     if (this.transport !== sourceTransport || this.activePeer?.id !== peer.id) return;
     await this.persistPeer(peer);
     const committed = await this.store.commitIncoming(incoming);
@@ -352,7 +412,11 @@ export class MessagingService {
       toPeerId: frame.fromPeerId,
       persistedAt: Date.now(),
     });
-    if (this.transport === sourceTransport && this.activePeer?.id === peer.id && sourceTransport.connectionState === "connected") {
+    if (
+      this.transport === sourceTransport &&
+      this.activePeer?.id === peer.id &&
+      sourceTransport.connectionState === 'connected'
+    ) {
       sourceTransport.send(encodeFrame(ack));
     }
     this.callbacks.onChange();
@@ -368,14 +432,16 @@ export class MessagingService {
   }
 
   private async ensureLocalPeer(): Promise<PeerIdentity> {
-    const local = this.localPeer ?? await this.initialize();
+    const local = this.localPeer ?? (await this.initialize());
     const storedName = await this.store.getStoredDisplayName();
-    if (!storedName) throw new Error("Choose your display name before connecting or sending messages.");
-    if (local.name !== storedName) this.localPeer = { ...local, name: storedName };
-    return this.localPeer!;
+    if (!storedName)
+      throw new Error('Choose your display name before connecting or sending messages.');
+    const updatedLocal = local.name === storedName ? local : { ...local, name: storedName };
+    this.localPeer = updatedLocal;
+    return updatedLocal;
   }
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "An unexpected error occurred.";
+  return error instanceof Error ? error.message : 'An unexpected error occurred.';
 }
