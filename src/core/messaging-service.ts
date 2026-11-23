@@ -40,6 +40,10 @@ export class MessagingService {
     return this.localPeer;
   }
 
+  async getStoredDisplayName(): Promise<string | null> {
+    return this.store.getStoredDisplayName();
+  }
+
   async updateDisplayName(name: string): Promise<PeerIdentity> {
     await this.store.setDisplayName(name);
     if (!this.localPeer) return this.initialize();

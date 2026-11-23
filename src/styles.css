@@ -43,7 +43,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 /* Application layout only. Component appearance and behaviour come from DaisyUI. */
 .app-drawer { min-height: 100vh; min-height: 100dvh; }
 .app-content { min-width: 0; min-height: 100vh; min-height: 100dvh; }
-.sidebar { display: flex; width: 17rem; min-height: 100vh; min-height: 100dvh; flex-direction: column; padding: 1.75rem 1rem 1rem; border-right: 1px solid var(--pairwire-line); background: #fbfbfb; }
+.sidebar { display: flex; width: 17rem; height: 100vh; height: 100dvh; min-height: 0; flex-direction: column; overflow: hidden; padding: 1.75rem 1rem 1rem; border-right: 1px solid var(--pairwire-line); background: #fbfbfb; }
+.sidebar-header { flex: 0 0 auto; }
 .brand-row { display: flex; gap: .7rem; align-items: center; padding: 0 .6rem 1.75rem; }
 .brand-mark { display: flex; width: 2.2rem; height: 2.2rem; flex: 0 0 auto; align-items: center; justify-content: center; gap: 3px; border: 1px solid var(--pairwire-line); border-radius: .7rem; background: #fff; }
 .brand-mark span { width: 4px; border-radius: 4px; background: #30383e; }
@@ -52,9 +53,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .brand-name { font-size: 1.25rem; line-height: 1; font-weight: 800; letter-spacing: -.06em; }
 .brand-period { color: #53866d; }
 .brand-caption { margin-top: .3rem; color: #8a9399; font-size: .65rem; }
+.brand-user { margin-top: .35rem; color: #929ca1; font-size: .58rem; }
+.brand-user strong { color: #53645b; font-weight: 650; }
 .sidebar-actions { padding: 0 .25rem 1.5rem; }
 .sidebar-section-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 .6rem .6rem; color: #899298; font: 600 .58rem/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; letter-spacing: .08em; }
-.conversation-list { flex: 1; align-content: start; overflow-y: auto; }
+.conversation-list { display: flex; min-height: 0; flex: 1 1 0%; flex-direction: column; flex-wrap: nowrap; align-items: stretch; align-content: flex-start; gap: .65rem; width: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .conversation-entry { position: relative; min-width: 0; }
 .conversation-entry > button:first-child { min-width: 0; border-radius: .75rem; }
 .conversation-menu-trigger { flex: 0 0 auto; margin-right: .1rem; opacity: .62; }
@@ -68,11 +71,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .conversation-name { font-size: .72rem; font-weight: 650; }
 .conversation-preview { max-width: 12rem; margin-top: .2rem; color: var(--pairwire-muted); font-size: .62rem; font-weight: 400; }
 .conversation-avatar > div { display: grid; width: 2.15rem; height: 2.15rem; place-items: center; border: 1px solid #e4e9e7; border-radius: .65rem; color: #3d6555; background: #edf5f0; font-size: .72rem; font-weight: 700; }
-.sidebar-bottom { display: flex; align-items: center; gap: .6rem; margin-top: 1rem; padding: .9rem .45rem .2rem; border-top: 1px solid var(--pairwire-line); }
-.profile-avatar > div { display: grid; width: 1.9rem; height: 1.9rem; place-items: center; border: 1px solid #e4e8e8; border-radius: .6rem; color: #53615b; background: #f1f4f2; font-size: .7rem; font-weight: 700; }
-.profile-fields { min-width: 0; flex: 1; }
-.profile-fields label { display: block; margin-bottom: .2rem; color: #929ba0; font-size: .6rem; }
-.profile-fields input { width: 100%; min-height: 0; height: auto; padding: 0; border: 0; color: #3a4348; background: transparent; font-size: .68rem; font-weight: 600; }
 .main-panel { display: flex; min-width: 0; min-height: 100vh; min-height: 100dvh; flex-direction: column; background: #fff; }
 .welcome-panel { width: min(100%, 56rem); margin: auto; padding: 3.25rem clamp(1.1rem, 4vw, 2.5rem) 2.1rem; }
 .welcome-eyebrow, .dialog-eyebrow { display: flex; align-items: center; gap: .55rem; color: #658274; font: 600 .62rem/1.3 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; letter-spacing: .08em; }
@@ -134,7 +132,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 
 /* Conversation rows: keep the selectable card full-width and its controls inline. */
 .conversation-list { width: 100%; padding-inline: .25rem; }
-.conversation-list > li.conversation-entry { display: block; width: 100%; min-width: 0; padding: 0; }
+.conversation-list > li.conversation-entry { display: block; width: 100%; min-width: 0; flex: 0 0 auto; padding: 0; }
 .conversation-row { display: flex; width: 100%; min-width: 0; align-items: center; gap: .35rem; }
 .conversation-select { display: flex; width: auto; min-width: 0; min-height: 4.1rem; flex: 1 1 auto; align-items: center; gap: .7rem; padding: .65rem .7rem; border: 1px solid transparent; border-radius: .8rem; color: var(--color-base-content); background: transparent; text-align: left; transition: background-color .15s ease, border-color .15s ease; }
 .conversation-select:hover { background: #f4f6f5; }
@@ -148,7 +146,19 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .conversation-actions-menu > li > .conversation-action-item:disabled { color: #8b9499 !important; opacity: .65 !important; }
 .conversation-actions-menu > li > .conversation-action-item > span { width: 1.1rem; color: #66736d; text-align: center; font-size: 1rem; }
 .conversation-row { padding: .2rem .25rem .2rem .45rem; border: 1px solid transparent; border-radius: .8rem; }
-.conversation-row:hover { background: #f7f8f7; }
-.conversation-row.is-selected { border-color: #e1e7e4; background: #f4f7f5; box-shadow: inset 0 0 0 1px rgb(36 57 46 / 2%); }
+.conversation-row { position: relative; }
+.conversation-row:hover { border-color: #e6ebe8; background: #f8faf8; }
+.conversation-row.is-selected {
+  border-color: #c7d9ce;
+  background: #edf4ef;
+  box-shadow: inset 3px 0 0 #628b73, 0 1px 2px rgb(30 55 42 / 4%);
+}
+.conversation-row.is-selected .conversation-avatar > div {
+  border-color: #d1e1d7;
+  background: #e1eee6;
+  color: #315e49;
+}
+.conversation-row.is-selected .conversation-name { color: #294f3d; }
 .conversation-select { min-height: 3.8rem; padding: .55rem .35rem; border: 0; background: transparent !important; box-shadow: none !important; }
 .conversation-select:hover { background: transparent !important; }
+.conversation-select:focus-visible { outline-offset: -2px; }

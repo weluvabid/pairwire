@@ -71,9 +71,11 @@ function App() {
   const [conversations, setConversations] = useState<Awaited<ReturnType<typeof messaging.getConversations>>>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [outbox, setOutbox] = useState<ChatMessage[]>([]);
-  const [displayName, setDisplayName] = useState("You");
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [nameSetupOpen, setNameSetupOpen] = useState(false);
+  const [displayNameDraft, setDisplayNameDraft] = useState("");
+  const [nameSaving, setNameSaving] = useState(false);
   const sendingRef = useRef(false);
   const [pairingOpen, setPairingOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -92,6 +94,7 @@ function App() {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const historyRef = useRef<HTMLDivElement | null>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const lastRenderedConversation = useRef<string | null>(null);
   const previousScroll = useRef({ height: 0, top: 0, nearBottom: true });
   const toastId = useRef(0);
@@ -132,9 +135,10 @@ function App() {
     void messaging.initialize().then(async (identity) => {
       if (cancelled) return;
       setLocalPeer(identity);
-      setDisplayName(identity.name);
-      const storedPeers = await messaging.getPeers();
-      if (!cancelled) setSelectedPeerId(storedPeers[0]?.id ?? null);
+      const [storedName, storedPeers] = await Promise.all([messaging.getStoredDisplayName(), messaging.getPeers()]);
+      if (cancelled) return;
+      setSelectedPeerId(storedPeers[0]?.id ?? null);
+      if (!storedName) setNameSetupOpen(true);
     }).catch((error: unknown) => showToast(error instanceof Error ? error.message : "Pairwire could not start.", "error"));
     return () => { cancelled = true; };
   }, [showToast]);
@@ -192,6 +196,13 @@ function App() {
     if (nearBottom) history.scrollTop = history.scrollHeight;
     else history.scrollTop = top + (history.scrollHeight - height);
   }, [messages]);
+
+  useEffect(() => {
+    const input = messageInputRef.current;
+    if (!input) return;
+    input.style.height = "auto";
+    input.style.height = `${Math.min(Math.max(input.scrollHeight, 64), 144)}px`;
+  }, [draft]);
 
   const isConnectedToSelection = connectionState === "connected" && connectedPeer?.id === selectedPeerId;
   const pendingForSelection = selectedPeerId ? outbox.filter((message) => message.toPeerId === selectedPeerId) : [];
@@ -334,15 +345,20 @@ function App() {
     if (value) await completeWithResponse(value);
   };
 
-  const saveDisplayName = async () => {
-    if (displayName.trim() === (localPeer?.name ?? "You")) return;
+  const saveDisplayName = async (event: SubmitEvent) => {
+    event.preventDefault();
+    const name = displayNameDraft.trim();
+    if (!name || nameSaving) return;
+    setNameSaving(true);
     try {
-      const updated = await messaging.updateDisplayName(displayName);
-      setLocalPeer(updated);
-      setDisplayName(updated.name);
-      showToast("Display name saved for future pairings.");
+      const identity = await messaging.updateDisplayName(name);
+      setLocalPeer(identity);
+      setNameSetupOpen(false);
+      showToast(`You're all set, ${identity.name}.`);
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Could not save your display name.", "error");
+    } finally {
+      setNameSaving(false);
     }
   };
 
@@ -383,7 +399,7 @@ function App() {
                 <div class="composer-hint">{composerHint}</div>
                 <form class="rounded-xl border border-base-300 bg-base-100 p-3 shadow-sm focus-within:border-success/40 focus-within:shadow-md" onSubmit={(event) => void sendMessage(event as unknown as SubmitEvent)}>
                   <label class="sr-only" htmlFor="message-input">Write a message</label>
-                  <textarea id="message-input" class="textarea textarea-ghost min-h-8 max-h-36 w-full resize-y border-0 bg-transparent px-1 py-1 text-xs leading-relaxed focus:outline-none" name="message" rows={1} maxLength={MAX_TEXT_LENGTH} placeholder="Write something thoughtful…" value={draft} disabled={!isConnectedToSelection} onInput={(event) => setDraft((event.currentTarget as HTMLTextAreaElement).value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); (event.currentTarget as HTMLTextAreaElement).form?.requestSubmit(); } }} />
+                  <textarea ref={messageInputRef} id="message-input" class="textarea textarea-ghost min-h-16 max-h-36 w-full resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-xs leading-relaxed focus:outline-none" name="message" rows={1} maxLength={MAX_TEXT_LENGTH} placeholder="Write something thoughtful…" value={draft} disabled={!isConnectedToSelection} onInput={(event) => setDraft((event.currentTarget as HTMLTextAreaElement).value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); (event.currentTarget as HTMLTextAreaElement).form?.requestSubmit(); } }} />
                   <div class="flex items-center justify-between border-t border-base-200 pt-2">
                     <span class="font-mono text-[.62rem] text-base-content/50">{draft.length.toLocaleString()} / {MAX_TEXT_LENGTH.toLocaleString()}</span>
                     <button class="btn btn-primary btn-sm" type="submit" disabled={sending || !isConnectedToSelection || !draft.trim()}>{sending ? <span class="loading loading-spinner loading-xs" /> : "Send ↑"}</button>
@@ -399,9 +415,11 @@ function App() {
       <div class="drawer-side z-40">
         <label htmlFor="pairwire-drawer" aria-label="Close conversations" class="drawer-overlay" />
         <aside class="sidebar" aria-label="Conversations">
-          <div class="brand-row"><div class="brand-mark" aria-hidden="true"><span /><span /><span /></div><div><div class="brand-name">pairwire<span class="brand-period">.</span></div><div class="brand-caption">A little more direct.</div></div></div>
-          <div class="sidebar-actions"><button class="btn btn-primary btn-sm w-full" type="button" onClick={() => { setMobileDrawerOpen(false); openPairing("create"); }}>＋ New connection</button></div>
-          <div class="sidebar-section-heading"><span>CONVERSATIONS</span><span class="badge badge-ghost">{peers.length}</span></div>
+          <div class="sidebar-header">
+            <div class="brand-row"><div class="brand-mark" aria-hidden="true"><span /><span /><span /></div><div class="min-w-0"><div class="brand-name">pairwire<span class="brand-period">.</span></div><div class="brand-caption">A little more direct.</div>{localPeer && <div class="brand-user" title={`This device is using the name ${localPeer.name}`}>Using as <strong>{localPeer.name}</strong></div>}</div></div>
+            <div class="sidebar-actions"><button class="btn btn-primary btn-sm w-full" type="button" onClick={() => { setMobileDrawerOpen(false); openPairing("create"); }}>＋ New connection</button></div>
+            <div class="sidebar-section-heading"><span>CONVERSATIONS</span><span class="badge badge-ghost">{peers.length}</span></div>
+          </div>
           <ul class="menu conversation-list">
             {peers.length === 0 ? <li class="menu-disabled"><span>Your people will show up here.</span></li> : [...peers].sort((a, b) => b.lastSeenAt - a.lastSeenAt).map((peer) => {
               const preview = conversations.find((conversation) => conversation.id === peer.conversationId)?.lastMessage ?? "Direct conversation";
@@ -424,11 +442,6 @@ function App() {
               </li>;
             })}
           </ul>
-          <div class="sidebar-bottom">
-            <div class="avatar placeholder profile-avatar"><div><span>{initials(displayName)}</span></div></div>
-            <div class="profile-fields"><label htmlFor="display-name">Your display name</label><input id="display-name" class="input input-ghost input-xs" name="display-name" maxLength={48} value={displayName} onInput={(event) => setDisplayName((event.currentTarget as HTMLInputElement).value)} onBlur={() => void saveDisplayName()} onKeyDown={(event) => { if (event.key === "Enter") (event.currentTarget as HTMLInputElement).blur(); }} autoComplete="nickname" /></div>
-            <span class="badge badge-success badge-xs" title="Stored in this browser">Local</span>
-          </div>
         </aside>
       </div>
 
@@ -443,6 +456,7 @@ function App() {
 
       <DetailsModal open={detailsOpen} connection={connectionDescription(isConnectedToSelection ? "connected" : reconnectPeerId === selectedPeerId ? connectionState : "disconnected")} peer={selectedPeer?.name ?? connectedPeer?.name ?? "—"} connected={isConnectedToSelection} onClose={() => setDetailsOpen(false)} onDisconnect={() => { messaging.closeConnection(); setDetailsOpen(false); showToast("Connection closed. History and pending messages remain on this device."); }} />
       <DeleteConversationModal peer={deleteTarget} pendingCount={deleteTarget ? outbox.filter((message) => message.toPeerId === deleteTarget.id).length : 0} busy={busyAction === (deleteTarget ? `delete:${deleteTarget.id}` : "")} onCancel={() => setDeleteTarget(null)} onConfirm={() => void confirmDeleteConversation()} />
+      <NameSetupModal open={nameSetupOpen} value={displayNameDraft} saving={nameSaving} onChange={setDisplayNameDraft} onSubmit={(event) => void saveDisplayName(event)} />
 
       <div class="toast toast-end toast-bottom z-[60] w-[min(22rem,calc(100vw-2rem))] pointer-events-none [&>.alert]:pointer-events-auto" aria-live="polite" aria-atomic="true">
         {notices.map((notice) => <div class={`alert ${notice.kind === "error" ? "alert-error" : "alert-info"}`} key={notice.id}><span>{notice.message}</span></div>)}
@@ -535,6 +549,35 @@ function ConversationActions({ peerName, connected, onReconnect, onDetails, onDe
   </>;
 }
 
+function NameSetupModal({ open, value, saving, onChange, onSubmit }: { open: boolean; value: string; saving: boolean; onChange(value: string): void; onSubmit(event: SubmitEvent): void }) {
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (open && !dialog.open) dialog.showModal();
+    else if (!open && dialog.open) dialog.close();
+  }, [open]);
+
+  return <dialog ref={dialogRef} class="modal" aria-labelledby="name-setup-title" aria-describedby="name-setup-description" onCancel={(event) => event.preventDefault()}>
+    <div class="modal-box max-w-md">
+      <div class="dialog-eyebrow">WELCOME TO PAIRWIRE</div>
+      <h2 id="name-setup-title" class="mt-3 text-2xl font-semibold tracking-tight">What should we call you?</h2>
+      <p id="name-setup-description" class="mt-2 text-sm leading-relaxed text-base-content/65">Choose the name other people will see when you connect. We'll remember it on this device.</p>
+      <form class="mt-5 space-y-4" onSubmit={(event) => onSubmit(event as unknown as SubmitEvent)}>
+        <fieldset class="fieldset">
+          <label class="label" htmlFor="display-name-setup">Your display name</label>
+          <input id="display-name-setup" class="input input-bordered w-full" name="display-name" value={value} maxLength={48} minLength={1} required autoComplete="nickname" autoFocus placeholder="Your name" onInput={(event) => onChange((event.currentTarget as HTMLInputElement).value)} />
+        </fieldset>
+        <div class="rounded-xl bg-base-200/70 p-3">
+          <div class="mb-2 text-[.62rem] font-semibold tracking-widest text-base-content/50">PREVIEW</div>
+          <div class="flex items-center gap-3"><div class="avatar placeholder"><div class="w-10 rounded-xl border border-success/10 bg-success/10 text-sm font-semibold text-success"><span>{initials(value || "?")}</span></div></div><strong class="text-sm">{value.trim() || "Your name"}</strong></div>
+        </div>
+        <div class="modal-action mt-2"><button class="btn btn-primary w-full" type="submit" disabled={saving || !value.trim()}>{saving ? <span class="loading loading-spinner loading-xs" /> : "Continue"}</button></div>
+      </form>
+    </div>
+  </dialog>;
+}
+
 function DeleteConversationModal({ peer, pendingCount, busy, onCancel, onConfirm }: { peer: PeerRecord | null; pendingCount: number; busy: boolean; onCancel(): void; onConfirm(): void }) {
   if (!peer) return null;
   return <div class="modal modal-open" role="dialog" aria-modal="true" aria-labelledby="delete-conversation-title"><div class="modal-box max-w-md">
@@ -551,7 +594,7 @@ function Message({ message, peerName, onRetry, retryBusy }: { message: ChatMessa
     <div class="chat-image avatar placeholder message-avatar"><div><span>{outgoing ? "Y" : initials(peerName)}</span></div></div>
     <div class="chat-header">{outgoing ? "You" : peerName}<time dateTime={new Date(message.createdAt).toISOString()}>{prettyTime(message.createdAt)}</time></div>
     <div class={`chat-bubble ${outgoing ? "chat-bubble-primary" : ""}`}>{message.text}</div>
-    {outgoing && <div class="chat-footer"><span class={`badge badge-xs ${message.status === "failed" ? "badge-error" : message.status === "delivered" ? "badge-success" : "badge-ghost"}`}>{statusLabel(message.status)}</span>{message.status === "failed" && <button class="btn btn-ghost btn-xs" type="button" disabled={retryBusy} onClick={onRetry}>Retry</button>}</div>}
+    {outgoing && <div class="chat-footer mt-1"><span class={`badge badge-xs ${message.status === "failed" ? "badge-error" : message.status === "delivered" ? "badge-success" : "badge-ghost"}`}>{statusLabel(message.status)}</span>{message.status === "failed" && <button class="btn btn-ghost btn-xs" type="button" disabled={retryBusy} onClick={onRetry}>Retry</button>}</div>}
   </div>;
 }
 

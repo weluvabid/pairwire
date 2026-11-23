@@ -16,7 +16,8 @@ This is a small engineering experiment. There is no application backend, account
 - Receiver-side deduplication in the same transaction as message insertion.
 - Retry of unacknowledged messages after reconnecting or reloading the page.
 - Explicit pending, sending, sent, delivered, and failed states.
-- Persisted peer metadata, display name, conversation history, and pending outbox.
+- Persisted peer metadata, device identity, display name, conversation history, and pending outbox.
+- First-launch display-name setup; the chosen name is stored in IndexedDB and included in invitation/response identity metadata.
 
 ## Requirements
 
@@ -44,12 +45,13 @@ The generated static site lives in `dist/` and can be hosted by any static-file 
 ## Pair two browsers
 
 1. Open Pairwire in two browser contexts. They can be two browsers or one normal window and one private window.
-2. In the first browser, choose **New connection**, then **Create & copy invitation**.
-3. Share the copied invitation through a messaging channel you already use.
-4. In the second browser, choose **Join a connection** and read the invitation from the clipboard.
-5. Pairwire validates the invitation, creates a response, and copies it to the clipboard. Send that response back.
-6. In the first browser, choose **Read response from clipboard** to complete pairing.
-7. Wait for both browsers to show a connected state, then exchange messages.
+2. On first launch in each browser profile, choose a display name. Pairwire stores it in IndexedDB and reuses it for future connections; the name is shared with the other peer as part of the invitation/response identity metadata.
+3. In the first browser, choose **New connection**, then **Create & copy invitation**.
+4. Share the copied invitation through a messaging channel you already use.
+5. In the second browser, choose **Join a connection** and read the invitation from the clipboard.
+6. Pairwire validates the invitation, creates a response, and copies it to the clipboard. Send that response back.
+7. In the first browser, choose **Read response from clipboard** to complete pairing.
+8. Wait for both browsers to show a connected state, then exchange messages.
 
 Pairing data contains WebRTC session information and ICE candidates. It can be larger than a typical QR payload, so Pairwire uses clipboard-assisted exchange. Clipboard access requires a secure context (HTTPS or localhost) and a user gesture. If browser permissions or support prevent clipboard access, Pairwire exposes a manual paste/copy fallback. The app never reads the clipboard automatically when a dialog opens. Do not post an invitation publicly while it is in use.
 
@@ -73,7 +75,7 @@ Pending messages remain on the sender's device while the recipient is offline. W
 
 Disconnecting closes only the WebRTC transport; it does not remove the peer, conversation, message history, or outbox from IndexedDB. Select the existing conversation and choose **Reconnect** (or use its conversation actions menu). Exchange a fresh invitation and response using either pairing role. Pairwire checks the remote device ID against the selected conversation before accepting the signaling payload, so an unrelated peer cannot silently take over that thread. Once the data channel reconnects, eligible outbox messages for that peer are retried automatically.
 
-History is local to the browser profile and origin that created it. It is not synchronised between devices, and clearing site data or changing browser profiles does not migrate the history or device identity. Pairwire currently supports one active peer connection per browser tab; switching to another peer replaces the active transport.
+History, device identity, and your display name are local to the browser profile and origin that created them. The display name is shared with peers during pairing, but it is not an account identity. It is not synchronised between your own devices, and clearing site data or changing browser profiles does not migrate the history or device identity. Pairwire currently supports one active peer connection per browser tab; switching to another peer replaces the active transport.
 
 ## Architecture
 

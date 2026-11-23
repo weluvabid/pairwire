@@ -37,8 +37,14 @@ export class PairwireStore {
     });
   }
 
+  async getStoredDisplayName(): Promise<string | null> {
+    const value = await this.getSetting("displayName");
+    const normalized = value?.trim();
+    return normalized ? normalized.slice(0, 48) : null;
+  }
+
   async getDisplayName(): Promise<string> {
-    return (await this.getSetting("displayName")) ?? "You";
+    return (await this.getStoredDisplayName()) ?? "You";
   }
 
   async setDisplayName(name: string): Promise<void> {
