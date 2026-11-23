@@ -23,6 +23,7 @@ type Notice = { id: number; message: string; kind: "info" | "error" };
 const store = new PairwireStore();
 const messaging = new MessagingService(store, {
   onChange: emitMessagingChange,
+  onMessage: (message) => window.dispatchEvent(new CustomEvent("pairwire:message", { detail: message })),
   onNotice: (message, kind = "info") => window.dispatchEvent(new CustomEvent("pairwire:notice", { detail: { message, kind } })),
 });
 
