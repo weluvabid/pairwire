@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "preact/hooks";
 
 export type PastedSignalingType = "invitation" | "response" | null;
+export type PairingPhase = "invitation-created" | "response-created" | "connecting" | null;
 
 export function PairingModal(props: {
   open: boolean;
@@ -11,6 +12,7 @@ export function PairingModal(props: {
   pastedText: string;
   pastedType: PastedSignalingType;
   pastedError: string | null;
+  pairingPhase: PairingPhase;
   clipboardFallback: "invitation-copy" | "response-copy" | null;
   onClose(): void;
   onPasteText(value: string): void;
@@ -18,7 +20,8 @@ export function PairingModal(props: {
   onReconnect(): void;
   onAcceptInvitation(): void;
   onCompleteResponse(): void;
-  onCopyFallback(): void;
+  onCopyInvitation(): void;
+  onCopyResponse(): void;
 }) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   useEffect(() => {
@@ -41,11 +44,16 @@ export function PairingModal(props: {
         <div>
           <div class="dialog-eyebrow mb-2">MAKE A CONNECTION</div>
           <h2 class="text-xl font-bold tracking-tight">Connect directly.</h2>
-          <p class="mt-2 max-w-md text-xs leading-relaxed text-base-content/60">Exchange a connection invitation through a messaging app you already use. Pairwire never sends your chat through a messaging server.</p>
+          <p class="mt-2 max-w-md text-xs leading-relaxed text-base-content/60">Exchange connection details through a messaging app you already use. Pairwire never sends your chat through a messaging server.</p>
         </div>
         <button class="btn btn-ghost btn-sm btn-square" type="button" onClick={props.onClose} aria-label="Close pairing dialog">✕</button>
       </div>
 
+      {props.pairingPhase && <div class="mx-6 mb-2 rounded-box bg-info/10 px-4 py-3 text-xs text-info-content max-sm:mx-4" role="status" aria-live="polite">
+        {props.pairingPhase === "invitation-created" && "Invitation created. Share it with the other person, then paste their response here."}
+        {props.pairingPhase === "response-created" && "Response created. Send it back to the inviter so they can complete the connection."}
+        {props.pairingPhase === "connecting" && "Response received. Pairwire is establishing the direct connection… Keep this dialog open."}
+      </div>}
       <section class="space-y-4 px-6 pt-2 max-sm:px-4">
         <div class="rounded-box border border-base-300 p-4 space-y-3">
           <div>
@@ -53,12 +61,13 @@ export function PairingModal(props: {
             <p class="mt-1 text-xs leading-relaxed text-base-content/60">Create an invitation and share it with someone.</p>
           </div>
           <button class="btn btn-primary w-full" type="button" disabled={busy} onClick={props.onGenerate}>
-            {props.busyAction === "generate" ? <span class="loading loading-spinner loading-xs" /> : "Create & copy invitation ↗"}
+            {props.busyAction === "generate" ? <span class="loading loading-spinner loading-xs" /> : "Create & copy invitation"}
           </button>
           {props.invitationOutput && <div class="space-y-2">
-            <div class="alert alert-warning text-xs">Clipboard copy wasn't available. Copy this invitation manually.</div>
-            <textarea class="textarea textarea-bordered w-full resize-none font-mono text-xs" rows={4} readOnly value={props.invitationOutput} />
-            <button class="btn btn-outline btn-sm" type="button" onClick={props.onCopyFallback}>Try copying again</button>
+            <label class="label py-0 text-xs font-medium" htmlFor="pairwire-invitation-output">Your invitation — send this to the other person</label>
+            <textarea id="pairwire-invitation-output" class="textarea textarea-bordered min-h-24 w-full resize-none font-mono text-xs" rows={4} readOnly value={props.invitationOutput} />
+            {props.clipboardFallback === "invitation-copy" && <p class="text-xs text-warning">Automatic copying wasn't available. Select the text above and copy it manually.</p>}
+            <button class="btn btn-outline btn-sm" type="button" onClick={props.onCopyInvitation}>Copy invitation</button>
           </div>}
         </div>
 
@@ -74,16 +83,17 @@ export function PairingModal(props: {
 
         <div class="rounded-box border border-base-300 p-4 space-y-3">
           <div>
-            <div class="text-sm font-semibold">Have an invitation or response?</div>
-            <p class="mt-1 text-xs leading-relaxed text-base-content/60">Paste the text you received. Pairwire will recognise it automatically.</p>
+            <div class="text-sm font-semibold">Paste what they sent you</div>
+            <p class="mt-1 text-xs leading-relaxed text-base-content/60">Paste an invitation or response. Pairwire will identify it and show the right next step.</p>
           </div>
+          <label class="label py-0 text-xs font-medium" htmlFor="pairwire-signaling-input">Received invitation or response</label>
           <textarea
-            class="textarea textarea-bordered min-h-28 w-full resize-none font-mono text-xs"
+            id="pairwire-signaling-input"
+            class="textarea textarea-bordered min-h-24 w-full resize-none font-mono text-xs"
             rows={4}
-            placeholder="Paste connection text here…"
+            placeholder="Paste the text you received here…"
             value={props.pastedText}
             onInput={(event) => props.onPasteText((event.currentTarget as HTMLTextAreaElement).value)}
-            aria-label="Paste Pairwire invitation or response"
             aria-describedby="pairing-paste-status"
           />
           <div id="pairing-paste-status" aria-live="polite" class="min-h-6">
@@ -97,6 +107,17 @@ export function PairingModal(props: {
               : actionLabel}
           </button>
         </div>
+
+        {props.responseOutput && <div class="rounded-box border border-success/30 bg-success/5 p-4 space-y-3" aria-live="polite">
+          <div>
+            <div class="text-sm font-semibold">Your response is ready</div>
+            <p class="mt-1 text-xs leading-relaxed text-base-content/70">Send this response back to the person who invited you. The connection is not established until they complete the next step.</p>
+          </div>
+          <label class="label py-0 text-xs font-medium" htmlFor="pairwire-response-output">Your response — send this back to the inviter</label>
+          <textarea id="pairwire-response-output" class="textarea textarea-bordered min-h-24 w-full resize-none font-mono text-xs" rows={4} readOnly value={props.responseOutput} />
+          {props.clipboardFallback === "response-copy" && <p class="text-xs text-warning">Automatic copying wasn't available. Select the text above and copy it manually.</p>}
+          <button class="btn btn-outline btn-sm" type="button" onClick={props.onCopyResponse}>Copy response</button>
+        </div>}
       </section>
 
       <div class="alert alert-info mx-6 my-5 text-xs max-sm:mx-4"><span>Only exchange invitations with people you intend to connect with. They contain temporary connection details.</span></div>

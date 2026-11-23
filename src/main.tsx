@@ -15,7 +15,7 @@ import { DeleteConversationModal } from "./components/dialogs/DeleteConversation
 import { DetailsModal } from "./components/dialogs/DetailsModal.js";
 import { Message } from "./components/chat/Message.js";
 import { NameSetupModal } from "./components/pairing/NameSetupModal.js";
-import { PairingModal, type PastedSignalingType } from "./components/pairing/PairingModal.js";
+import { PairingModal, type PairingPhase, type PastedSignalingType } from "./components/pairing/PairingModal.js";
 import { Welcome } from "./components/layout/Welcome.js";
 import { PairwireStore } from "./storage/indexed-db.js";
 
@@ -51,8 +51,8 @@ function App() {
   const [pastedType, setPastedType] = useState<PastedSignalingType>(null);
   const [pastedError, setPastedError] = useState<string | null>(null);
   const [responseOutput, setResponseOutput] = useState("");
+  const [pairingPhase, setPairingPhase] = useState<PairingPhase>(null);
   const [clipboardFallback, setClipboardFallback] = useState<"invitation-copy" | "response-copy" | null>(null);
-  const [clipboardFallbackText, setClipboardFallbackText] = useState("");
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const busyActionRef = useRef<string | null>(null);
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -65,17 +65,22 @@ function App() {
   const connectedPeer = messaging.connectedPeer;
   const connectionState = messaging.connectionState;
 
-  useEffect(() => {
-    if (!pairingOpen || !reconnectPeerId || connectionState !== "connected" || connectedPeer?.id !== reconnectPeerId) return;
-    setPairingOpen(false);
-    setReconnectPeerId(null);
-  }, [pairingOpen, reconnectPeerId, connectionState, connectedPeer?.id]);
-
   const showToast = useCallback((message: string, kind: "info" | "error" = "info") => {
     const id = ++toastId.current;
     setNotices((current) => [...current, { id, message, kind }]);
     window.setTimeout(() => setNotices((current) => current.filter((notice) => notice.id !== id)), 4500);
   }, []);
+
+  useEffect(() => {
+    if (connectionState !== "connected" || !connectedPeer) return;
+    if (pairingPhase) {
+      setPairingPhase(null);
+      setPairingOpen(false);
+      setReconnectPeerId(null);
+      showToast(`Connected to ${connectedPeer.name}.`, "info");
+    }
+  }, [pairingPhase, connectionState, connectedPeer?.id, connectedPeer?.name, showToast]);
+
 
   useEffect(() => {
     const onNotice = (event: Event) => {
@@ -186,6 +191,13 @@ function App() {
     : connectedPeer && connectedPeer.id !== selectedPeerId
       ? `Reconnect to ${selectedPeer?.name ?? "this peer"} to send a message.`
       : "Your history stays on this device. Connect to this peer to send a message.";
+  const pairingNotice = pairingPhase === "response-created" && connectedPeer?.id === selectedPeerId
+    ? `Your response is ready. Send it back to ${connectedPeer.name}; the connection will finish when they complete pairing.`
+    : pairingPhase === "connecting" && (connectedPeer?.id === selectedPeerId || reconnectPeerId === selectedPeerId)
+      ? `Connecting to ${selectedPeer?.name ?? "your peer"}… Keep Pairwire open while the connection is established.`
+      : pairingPhase === "invitation-created" && reconnectPeerId === selectedPeerId
+        ? `Your new invitation is ready. Send it to ${selectedPeer?.name ?? "your peer"} to reconnect.`
+        : null;
 
   const withBusy = async (key: string, action: () => Promise<void>) => {
     if (busyActionRef.current) return;
@@ -198,14 +210,15 @@ function App() {
 
   const openPairing = () => {
     if (!initialized || !localPeer || nameSetupOpen) return;
-    setReconnectPeerId(null);
+    const selectedIsDisconnected = Boolean(selectedPeerId && peers.some((peer) => peer.id === selectedPeerId) && !(connectionState === "connected" && connectedPeer?.id === selectedPeerId));
+    setReconnectPeerId(selectedIsDisconnected ? selectedPeerId : null);
     setInvitationOutput("");
     setPastedText("");
     setPastedType(null);
     setPastedError(null);
     setResponseOutput("");
+    setPairingPhase(null);
     setClipboardFallback(null);
-    setClipboardFallbackText("");
     setPairingOpen(true);
   };
 
@@ -221,8 +234,8 @@ function App() {
     setPastedType(null);
     setPastedError(null);
     setResponseOutput("");
+    setPairingPhase(null);
     setClipboardFallback(null);
-    setClipboardFallbackText("");
     setDetailsOpen(false);
     setMobileDrawerOpen(false);
     setPairingOpen(true);
@@ -247,12 +260,10 @@ function App() {
     try {
       await writeClipboardText(value);
       setClipboardFallback(null);
-      setClipboardFallbackText("");
-      showToast(successMessage ?? `${label} copied. Share it with your peer.`);
+        showToast(successMessage ?? `${label} copied. Share it with your peer.`);
       return true;
     } catch (error) {
       setClipboardFallback(fallback);
-      setClipboardFallbackText(value);
       // The inline manual-copy fallback is the actionable feedback. Avoid a
       // duplicate permission-denied toast that obscures the pairing dialog.
       return false;
@@ -262,8 +273,9 @@ function App() {
   const acceptInvitationText = async (value: string) => {
     decodeSignaling(value, "pairwire-invitation");
     const response = await messaging.acceptInvitation(value, reconnectPeerId ?? undefined);
-    const copied = await writeClipboard(response, "Response", "response-copy");
-    setResponseOutput(copied ? "" : response);
+    await writeClipboard(response, "Response", "response-copy");
+    setResponseOutput(response);
+    setPairingPhase("response-created");
     setPastedText("");
     setPastedType(null);
     setPastedError(null);
@@ -276,6 +288,7 @@ function App() {
     setPastedType(null);
     setPastedError(null);
     setClipboardFallback(null);
+    setPairingPhase("connecting");
     showToast("Response accepted. Establishing the direct connection…");
   };
 
@@ -284,13 +297,14 @@ function App() {
     // intentionally replaces the previous pending invitation.
     setInvitationOutput("");
     const value = await messaging.createInvitation();
-    const copied = await writeClipboard(
+    await writeClipboard(
       value,
       "Invitation",
       "invitation-copy",
       "New invitation copied. It replaces any earlier invitation; share this one with your peer.",
     );
-    setInvitationOutput(copied ? "" : value);
+    setInvitationOutput(value);
+    setPairingPhase("invitation-created");
   };
 
   const handlePastedSignaling = (value: string) => {
@@ -370,7 +384,7 @@ function App() {
             <section class="chat-panel" aria-label="Conversation">
               <div class="chat-history" ref={historyRef} aria-live="polite">
                 <div class="history-start"><span /><p>{messages.length ? "Conversation history" : "This is the beginning of your conversation."}</p><span /></div>
-                {!isConnectedToSelection && <div class="alert alert-warning mx-auto mb-4 max-w-xl text-xs"><span>{selectedPeer.name} is disconnected. Your local history is safe; reconnect to continue this conversation.</span></div>}
+                {!isConnectedToSelection && <div class={`alert ${pairingNotice ? "alert-info" : "alert-warning"} mx-auto mb-4 max-w-xl text-xs`}><span>{pairingNotice ?? `${selectedPeer.name} is disconnected. Your local history is safe; reconnect to continue this conversation.`}</span></div>}
                 {pendingForSelection > 0 && <div class="alert alert-info mx-auto mb-4 max-w-xl text-xs"><span>{pendingForSelection} {pendingForSelection === 1 ? "message is" : "messages are"} waiting for delivery. They will be retried when you reconnect.</span></div>}
                 {messages.map((message) => <Message key={message.id} message={message} peerName={connectedPeer?.name ?? selectedPeer.name} onRetry={() => void withBusy(`retry:${message.id}`, () => messaging.retryMessage(message.id))} retryBusy={busyAction === `retry:${message.id}`} />)}
               </div>
@@ -431,6 +445,7 @@ function App() {
         busyAction={busyAction}
         invitationOutput={invitationOutput}
         responseOutput={responseOutput}
+        pairingPhase={pairingPhase}
         pastedText={pastedText}
         pastedType={pastedType}
         pastedError={pastedError}
@@ -441,7 +456,8 @@ function App() {
         onReconnect={() => void withBusy("reconnect", reconnectWithInvitation)}
         onAcceptInvitation={() => void withBusy("accept", () => acceptInvitationText(pastedText))}
         onCompleteResponse={() => void withBusy("complete", () => completeWithResponse(pastedText))}
-        onCopyFallback={() => void writeClipboard(clipboardFallbackText, clipboardFallback === "invitation-copy" ? "Invitation" : "Response", clipboardFallback ?? "invitation-copy").then((copied) => { if (!copied) return; if (clipboardFallback === "invitation-copy") setInvitationOutput(""); else setResponseOutput(""); })}
+        onCopyInvitation={() => void writeClipboard(invitationOutput, "Invitation", "invitation-copy")}
+        onCopyResponse={() => void writeClipboard(responseOutput, "Response", "response-copy")}
       />
 
       <DetailsModal open={detailsOpen} connection={connectionDescription(isConnectedToSelection ? "connected" : reconnectPeerId === selectedPeerId ? connectionState : "disconnected")} peer={selectedPeer?.name ?? connectedPeer?.name ?? "—"} connected={isConnectedToSelection} onClose={() => setDetailsOpen(false)} onDisconnect={() => { messaging.closeConnection(); setDetailsOpen(false); showToast("Connection closed. History and pending messages remain on this device."); }} />
