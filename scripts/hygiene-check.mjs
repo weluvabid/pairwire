@@ -26,7 +26,7 @@ async function visit(path) {
 }
 
 for (const root of [...roots, ".github"]) await visit(root);
-for (const file of ["index.html", "README.md", "vite.config.ts", "package.json", "tsconfig.json", "tsconfig.build.json", ".gitignore", ".npmrc", ".editorconfig", "LICENSE"]) {
+for (const file of ["index.html", "README.md", "vite.config.ts", "package.json", "tsconfig.json", "tsconfig.build.json", "tsconfig.test.json", ".gitignore", ".npmrc", ".editorconfig", "LICENSE"]) {
   try {
     const content = await readFile(file, "utf8");
     if (!content.endsWith("\n")) failures.push(`${file}: missing final newline`);

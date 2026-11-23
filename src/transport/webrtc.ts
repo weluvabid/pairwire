@@ -62,8 +62,6 @@ export class WebRtcTransport {
     }
     this.close(false);
     this.role = "responder";
-    this.remotePeer = invitation.peer;
-    this.callbacks.onRemotePeer(invitation.peer);
     this.setState("connecting");
 
     const connection = this.createConnection();
@@ -74,6 +72,8 @@ export class WebRtcTransport {
     const description = connection.localDescription;
     if (!description?.sdp) throw new Error("The browser did not produce a connection response.");
 
+    this.remotePeer = invitation.peer;
+    this.callbacks.onRemotePeer(invitation.peer);
     const payload: SignalingPayload = {
       type: "pairwire-response",
       version: 1,
@@ -92,9 +92,9 @@ export class WebRtcTransport {
     if (expectedPeerId && response.peer.id !== expectedPeerId) {
       throw new ProtocolError("That response belongs to a different peer. Your existing conversation was not changed.");
     }
+    await this.connection.setRemoteDescription(response.description);
     this.remotePeer = response.peer;
     this.callbacks.onRemotePeer(response.peer);
-    await this.connection.setRemoteDescription(response.description);
   }
 
   send(data: string): void {
@@ -190,27 +190,29 @@ export class WebRtcTransport {
 
 function waitForIceGathering(connection: RTCPeerConnection): Promise<void> {
   if (connection.iceGatheringState === "complete") return Promise.resolve();
+
   return new Promise((resolve, reject) => {
-    let timeout: ReturnType<typeof setTimeout>;
+    let settled = false;
+    const timeout = setTimeout(() => finish(new Error("Gathering connection candidates timed out. Check your network and retry.")), GATHERING_TIMEOUT_MS);
+
     const cleanup = () => {
       clearTimeout(timeout);
       connection.removeEventListener("icegatheringstatechange", handleStateChange);
-      connection.removeEventListener("icecandidateerror", handleCandidateError);
+    };
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) reject(error);
+      else resolve();
     };
     const handleStateChange = () => {
-      if (connection.iceGatheringState === "complete") {
-        cleanup();
-        resolve();
-      }
+      if (connection.iceGatheringState === "complete") finish();
     };
-    const handleCandidateError = () => {
-      // Individual STUN errors can be non-fatal; gathering completion decides viability.
-    };
-    timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error("Gathering connection candidates timed out. Check your network and retry."));
-    }, GATHERING_TIMEOUT_MS);
+
     connection.addEventListener("icegatheringstatechange", handleStateChange);
-    connection.addEventListener("icecandidateerror", handleCandidateError);
+    // Recheck after subscribing so completion cannot fall between the initial
+    // state check and listener registration.
+    handleStateChange();
   });
 }

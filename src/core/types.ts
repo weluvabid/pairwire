@@ -72,6 +72,7 @@ export interface ConversationRecord {
   peerId: string;
   updatedAt: number;
   lastMessage?: string;
+  lastMessageAt?: number;
 }
 
 export interface SettingsRecord {

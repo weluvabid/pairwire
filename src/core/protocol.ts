@@ -33,16 +33,20 @@ export function createWireMessage(input: {
   if (text.length > MAX_TEXT_LENGTH) {
     throw new ProtocolError(`Messages must be ${MAX_TEXT_LENGTH.toLocaleString()} characters or fewer.`);
   }
+  const id = validateIdentifier(input.id, "id");
+  const fromPeerId = validateIdentifier(input.fromPeerId, "fromPeerId");
+  const toPeerId = validateIdentifier(input.toPeerId, "toPeerId");
+  if (fromPeerId === toPeerId) throw new ProtocolError("A message cannot be sent to the same device.");
   return {
     protocol: PROTOCOL_NAME,
     version: PROTOCOL_VERSION,
     type: "message",
-    id: input.id,
-    conversationId: conversationIdFor(input.fromPeerId, input.toPeerId),
-    fromPeerId: input.fromPeerId,
-    toPeerId: input.toPeerId,
+    id,
+    conversationId: conversationIdFor(fromPeerId, toPeerId),
+    fromPeerId,
+    toPeerId,
     text,
-    createdAt: input.createdAt,
+    createdAt: requireTimestamp(input.createdAt, "createdAt"),
   };
 }
 
@@ -52,14 +56,17 @@ export function createAcknowledgement(input: {
   toPeerId: string;
   persistedAt: number;
 }): WireAcknowledgement {
+  const fromPeerId = validateIdentifier(input.fromPeerId, "fromPeerId");
+  const toPeerId = validateIdentifier(input.toPeerId, "toPeerId");
+  if (fromPeerId === toPeerId) throw new ProtocolError("An acknowledgement cannot target the same device.");
   return {
     protocol: PROTOCOL_NAME,
     version: PROTOCOL_VERSION,
     type: "ack",
-    messageId: input.messageId,
-    fromPeerId: input.fromPeerId,
-    toPeerId: input.toPeerId,
-    persistedAt: input.persistedAt,
+    messageId: validateIdentifier(input.messageId, "messageId"),
+    fromPeerId,
+    toPeerId,
+    persistedAt: requireTimestamp(input.persistedAt, "persistedAt"),
   };
 }
 
@@ -93,14 +100,15 @@ export function decodeFrame(input: string): WireFrame {
       protocol: PROTOCOL_NAME,
       version: PROTOCOL_VERSION,
       type: "message",
-      id: requireString(value, "id", 256),
-      conversationId: requireString(value, "conversationId", 1024),
-      fromPeerId: requireString(value, "fromPeerId", 256),
-      toPeerId: requireString(value, "toPeerId", 256),
+      id: requireIdentifier(value, "id"),
+      conversationId: requireString(value, "conversationId", 513),
+      fromPeerId: requirePeerId(value, "fromPeerId"),
+      toPeerId: requirePeerId(value, "toPeerId"),
       text: requireString(value, "text", MAX_TEXT_LENGTH),
-      createdAt: requireFiniteNumber(value, "createdAt"),
+      createdAt: requireTimestamp(requireFiniteNumber(value, "createdAt"), "createdAt"),
     };
     if (!frame.text.trim()) throw new ProtocolError("Incoming message is empty.");
+    if (frame.fromPeerId === frame.toPeerId) throw new ProtocolError("A message cannot be sent to the same device.");
     if (frame.conversationId !== conversationIdFor(frame.fromPeerId, frame.toPeerId)) {
       throw new ProtocolError("Incoming message has an invalid conversation ID.");
     }
@@ -108,14 +116,17 @@ export function decodeFrame(input: string): WireFrame {
   }
 
   if (value["type"] === "ack") {
+    const fromPeerId = requirePeerId(value, "fromPeerId");
+    const toPeerId = requirePeerId(value, "toPeerId");
+    if (fromPeerId === toPeerId) throw new ProtocolError("An acknowledgement cannot target the same device.");
     return {
       protocol: PROTOCOL_NAME,
       version: PROTOCOL_VERSION,
       type: "ack",
-      messageId: requireString(value, "messageId", 256),
-      fromPeerId: requireString(value, "fromPeerId", 256),
-      toPeerId: requireString(value, "toPeerId", 256),
-      persistedAt: requireFiniteNumber(value, "persistedAt"),
+      messageId: requireIdentifier(value, "messageId"),
+      fromPeerId,
+      toPeerId,
+      persistedAt: requireTimestamp(requireFiniteNumber(value, "persistedAt"), "persistedAt"),
     };
   }
 
@@ -126,6 +137,25 @@ export function encodeSignaling(payload: SignalingPayload): string {
   const text = JSON.stringify(payload);
   if (text.length > MAX_SIGNALING_CHARS) throw new ProtocolError("Pairing data is too large.");
   return text;
+}
+
+export type DecodedSignaling = SignalingPayload;
+
+/** Decode either supported signaling payload without trusting its declared type. */
+export function decodeAnySignaling(input: string): DecodedSignaling {
+  if (input.length > MAX_SIGNALING_CHARS) throw new ProtocolError("Pairing data is too large.");
+  let value: unknown;
+  try {
+    value = JSON.parse(input) as unknown;
+  } catch {
+    throw new ProtocolError("This doesn't look like a Pairwire invitation or response.");
+  }
+  if (!isRecord(value)) {
+    throw new ProtocolError("This doesn't look like a Pairwire invitation or response.");
+  }
+  if (value["type"] === "pairwire-invitation") return decodeSignaling(input, "pairwire-invitation");
+  if (value["type"] === "pairwire-response") return decodeSignaling(input, "pairwire-response");
+  throw new ProtocolError("This doesn't look like a Pairwire invitation or response.");
 }
 
 export function decodeSignaling(
@@ -152,9 +182,12 @@ export function decodeSignaling(
   const peer = value["peer"];
   const description = value["description"];
   const identity: PeerIdentity = {
-    id: requireString(peer, "id", 256),
-    name: requireString(peer, "name", 80),
+    id: requirePeerId(peer, "id"),
+    name: normalizeRemoteName(requireString(peer, "name", 48)),
   };
+  if (identity.name.trim() !== identity.name || /[\u0000-\u001f\u007f]/.test(identity.name)) {
+    throw new ProtocolError("Invalid peer display name.");
+  }
   if (description["type"] !== (expectedType === "pairwire-invitation" ? "offer" : "answer")) {
     throw new ProtocolError("Pairing payload has an invalid WebRTC description type.");
   }
@@ -191,4 +224,32 @@ function requireFiniteNumber(record: Record<string, unknown>, key: string): numb
     throw new ProtocolError(`Invalid ${key} field.`);
   }
   return value;
+}
+
+function requireTimestamp(value: number, key: string): number {
+  if (!Number.isSafeInteger(value) || value > 8_640_000_000_000_000) {
+    throw new ProtocolError(`Invalid ${key} field.`);
+  }
+  return value;
+}
+
+function requireIdentifier(record: Record<string, unknown>, key: string): string {
+  return validateIdentifier(requireString(record, key, 256), key);
+}
+
+function validateIdentifier(value: string, key: string): string {
+  if (!/^[A-Za-z0-9._-]{1,256}$/.test(value)) throw new ProtocolError(`Invalid ${key} field.`);
+  return value;
+}
+
+function requirePeerId(record: Record<string, unknown>, key: string): string {
+  return requireIdentifier(record, key);
+}
+
+function normalizeRemoteName(value: string): string {
+  const normalized = value.trim();
+  if (!normalized || /[\u0000-\u001f\u007f]/.test(normalized)) {
+    throw new ProtocolError("Invalid peer display name.");
+  }
+  return normalized;
 }

@@ -1,13 +1,13 @@
+import preact from "@preact/preset-vite";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 
 export default defineConfig({
   base: "./",
-  plugins: [tailwindcss()],
+  plugins: [preact(), tailwindcss()],
   build: {
     target: "es2022",
     outDir: "dist",
-    emptyOutDir: false,
     sourcemap: true,
   },
   server: {

@@ -6,6 +6,7 @@ import type {
   SettingsRecord,
 } from "../core/types.js";
 import { transitionMessage } from "../core/message-state.js";
+import { hasSameMessageIdentity } from "../core/message-identity.js";
 
 const DATABASE_NAME = "pairwire";
 const DATABASE_VERSION = 1;
@@ -40,7 +41,8 @@ export class PairwireStore {
   async getStoredDisplayName(): Promise<string | null> {
     const value = await this.getSetting("displayName");
     const normalized = value?.trim();
-    return normalized ? normalized.slice(0, 48) : null;
+    if (!normalized || normalized.length > 48 || /[\u0000-\u001f\u007f]/.test(normalized)) return null;
+    return normalized;
   }
 
   async getDisplayName(): Promise<string> {
@@ -48,7 +50,10 @@ export class PairwireStore {
   }
 
   async setDisplayName(name: string): Promise<void> {
-    const normalized = name.trim().slice(0, 48) || "You";
+    const normalized = name.trim();
+    if (!normalized || normalized.length > 48 || /[\u0000-\u001f\u007f]/.test(normalized)) {
+      throw new StorageError("Display names must contain 1–48 visible characters.");
+    }
     await this.setSetting("displayName", normalized);
   }
 
@@ -57,15 +62,30 @@ export class PairwireStore {
   }
 
   async savePeer(peer: PeerRecord): Promise<void> {
-    await this.withOneStore(STORES.peers, "readwrite", async (store) => {
-      await requestResult(store.put(peer));
+    await this.withStores([STORES.peers, STORES.conversations], "readwrite", async (stores) => {
+      const peers = stores[STORES.peers];
+      const conversations = stores[STORES.conversations];
+      if (!peers || !conversations) throw new StorageError("Storage schema is incomplete.");
+      await requestResult(peers.put(peer));
+      const current = await requestResult(conversations.get(peer.conversationId) as IDBRequest<ConversationRecord | undefined>);
+      await requestResult(conversations.put({
+        ...current,
+        id: peer.conversationId,
+        peerId: peer.id,
+        updatedAt: Math.max(current?.updatedAt ?? 0, peer.lastSeenAt),
+      }));
     });
-    await this.upsertConversation({ id: peer.conversationId, peerId: peer.id, updatedAt: peer.lastSeenAt });
   }
 
   async getConversations(): Promise<ConversationRecord[]> {
     return this.withOneStore(STORES.conversations, "readonly", (store) =>
       requestResult(store.getAll() as IDBRequest<ConversationRecord[]>),
+    );
+  }
+
+  async getMessage(id: string): Promise<ChatMessage | undefined> {
+    return this.withOneStore(STORES.messages, "readonly", (store) =>
+      requestResult(store.get(id) as IDBRequest<ChatMessage | undefined>),
     );
   }
 
@@ -112,8 +132,9 @@ export class PairwireStore {
           ...previous,
           id: message.conversationId,
           peerId: message.toPeerId,
-          updatedAt: message.createdAt,
-          lastMessage: message.text,
+          updatedAt: Math.max(previous?.updatedAt ?? 0, message.createdAt),
+          lastMessage: message.createdAt >= (previous?.lastMessageAt ?? 0) ? message.text : previous?.lastMessage,
+          lastMessageAt: Math.max(previous?.lastMessageAt ?? 0, message.createdAt),
         }));
       });
     } catch (error) {
@@ -128,15 +149,21 @@ export class PairwireStore {
         const conversations = stores[STORES.conversations];
         if (!messages || !conversations) throw new StorageError("Storage schema is incomplete.");
         const existing = await requestResult(messages.get(message.id) as IDBRequest<ChatMessage | undefined>);
-        if (existing) return { inserted: false, message: existing };
+        if (existing) {
+          if (!hasSameMessageIdentity(existing, message)) {
+            throw new StorageError("A message ID was reused with different content. The conflicting message was rejected.");
+          }
+          return { inserted: false, message: existing };
+        }
         await requestResult(messages.add(message));
         const previous = await requestResult(conversations.get(message.conversationId) as IDBRequest<ConversationRecord | undefined>);
         await requestResult(conversations.put({
           ...previous,
           id: message.conversationId,
           peerId: message.fromPeerId,
-          updatedAt: message.createdAt,
-          lastMessage: message.text,
+          updatedAt: Math.max(previous?.updatedAt ?? 0, message.createdAt),
+          lastMessage: message.createdAt >= (previous?.lastMessageAt ?? 0) ? message.text : previous?.lastMessage,
+          lastMessageAt: Math.max(previous?.lastMessageAt ?? 0, message.createdAt),
         }));
         return { inserted: true, message };
       });
@@ -205,12 +232,6 @@ export class PairwireStore {
     });
   }
 
-  private async upsertConversation(conversation: ConversationRecord): Promise<void> {
-    await this.withOneStore(STORES.conversations, "readwrite", async (store) => {
-      const current = await requestResult(store.get(conversation.id) as IDBRequest<ConversationRecord | undefined>);
-      await requestResult(store.put({ ...current, ...conversation }));
-    });
-  }
 
   private async withOneStore<T>(
     storeName: string,
@@ -254,39 +275,50 @@ export class PairwireStore {
 
   private openDatabase(): Promise<IDBDatabase> {
     if (this.databasePromise) return this.databasePromise;
-    this.databasePromise = new Promise((resolve, reject) => {
+
+    let promise!: Promise<IDBDatabase>;
+    promise = new Promise((resolve, reject) => {
       const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
+      let settled = false;
+
+      const fail = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        if (this.databasePromise === promise) this.databasePromise = null;
+        reject(error);
+      };
+
       request.onupgradeneeded = () => {
         const db = request.result;
-        if (!db.objectStoreNames.contains(STORES.settings)) {
-          db.createObjectStore(STORES.settings, { keyPath: "key" });
-        }
-        if (!db.objectStoreNames.contains(STORES.peers)) {
-          db.createObjectStore(STORES.peers, { keyPath: "id" });
-        }
-        if (!db.objectStoreNames.contains(STORES.conversations)) {
-          db.createObjectStore(STORES.conversations, { keyPath: "id" });
-        }
+        if (!db.objectStoreNames.contains(STORES.settings)) db.createObjectStore(STORES.settings, { keyPath: "key" });
+        if (!db.objectStoreNames.contains(STORES.peers)) db.createObjectStore(STORES.peers, { keyPath: "id" });
+        if (!db.objectStoreNames.contains(STORES.conversations)) db.createObjectStore(STORES.conversations, { keyPath: "id" });
         if (!db.objectStoreNames.contains(STORES.messages)) {
           const messages = db.createObjectStore(STORES.messages, { keyPath: "id" });
           messages.createIndex("byConversation", "conversationId", { unique: false });
         }
-        if (!db.objectStoreNames.contains(STORES.outbox)) {
-          db.createObjectStore(STORES.outbox, { keyPath: "id" });
-        }
+        if (!db.objectStoreNames.contains(STORES.outbox)) db.createObjectStore(STORES.outbox, { keyPath: "id" });
       };
+
       request.onsuccess = () => {
         const db = request.result;
+        if (settled) {
+          db.close();
+          return;
+        }
+        settled = true;
         db.onversionchange = () => {
           db.close();
-          this.databasePromise = null;
+          if (this.databasePromise === promise) this.databasePromise = null;
         };
         resolve(db);
       };
-      request.onerror = () => reject(wrapStorageError("Could not open local message storage.", request.error));
-      request.onblocked = () => reject(new StorageError("Storage upgrade is blocked by another tab."));
+      request.onerror = () => fail(wrapStorageError("Could not open local message storage.", request.error));
+      request.onblocked = () => fail(new StorageError("Storage upgrade is blocked by another tab. Close other Pairwire tabs and retry."));
     });
-    return this.databasePromise;
+
+    this.databasePromise = promise;
+    return promise;
   }
 }
 

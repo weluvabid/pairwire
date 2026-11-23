@@ -5,7 +5,7 @@ import {
   isTerminalStatus,
   transitionMessage,
   InvalidMessageTransitionError,
-} from "../dist/core/message-state.js";
+} from "../.test-dist/core/message-state.js";
 
 test("normal delivery transitions are accepted", () => {
   assert.equal(transitionMessage("pending", "sending"), "sending");

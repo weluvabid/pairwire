@@ -57,15 +57,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .brand-user strong { color: #53645b; font-weight: 650; }
 .sidebar-actions { padding: 0 .25rem 1.5rem; }
 .sidebar-section-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 .6rem .6rem; color: #899298; font: 600 .58rem/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; letter-spacing: .08em; }
-.conversation-list { display: flex; min-height: 0; flex: 1 1 0%; flex-direction: column; flex-wrap: nowrap; align-items: stretch; align-content: flex-start; gap: .65rem; width: 100%; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.conversation-list { display: flex; min-height: 0; width: 100%; flex: 1 1 0%; flex-direction: column; flex-wrap: nowrap; align-items: stretch; align-content: flex-start; gap: .65rem; overflow-x: hidden; overflow-y: auto; padding-inline: .25rem; overscroll-behavior: contain; scrollbar-gutter: stable; }
 .conversation-entry { position: relative; min-width: 0; }
-.conversation-entry > button:first-child { min-width: 0; border-radius: .75rem; }
-.conversation-menu-trigger { flex: 0 0 auto; margin-right: .1rem; opacity: .62; }
-.conversation-entry:hover .conversation-menu-trigger, .conversation-menu-trigger:focus-visible, .conversation-menu-trigger[aria-expanded="true"] { opacity: 1; }
-.conversation-status { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; padding: .2rem; cursor: default; }
+.conversation-menu-trigger { width: 1.8rem !important; height: 1.8rem !important; min-height: 1.8rem !important; flex: 0 0 auto; margin: 0; border-radius: .5rem; opacity: .55; }
+.conversation-entry:hover .conversation-menu-trigger, .conversation-menu-trigger:focus-visible, .conversation-menu-trigger[aria-expanded="true"] { background: #edf0ef; opacity: 1; }
+.conversation-status { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: center; padding: .25rem; cursor: default; }
 .mobile-context { display: flex; min-height: 3.5rem; align-items: center; gap: .65rem; padding: .45rem .75rem; border-bottom: 1px solid var(--pairwire-line); background: #fff; }
 @media (min-width: 1024px) { .mobile-context { display: none; } }
-.conversation-list > li > button { display: flex; min-width: 0; align-items: center; gap: .65rem; padding: .55rem .6rem; }
 .conversation-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; }
 .conversation-name, .conversation-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .conversation-name { font-size: .72rem; font-weight: 650; }
@@ -131,22 +129,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 }
 
 /* Conversation rows: keep the selectable card full-width and its controls inline. */
-.conversation-list { width: 100%; padding-inline: .25rem; }
 .conversation-list > li.conversation-entry { display: block; width: 100%; min-width: 0; flex: 0 0 auto; padding: 0; }
-.conversation-row { display: flex; width: 100%; min-width: 0; align-items: center; gap: .35rem; }
-.conversation-select { display: flex; width: auto; min-width: 0; min-height: 4.1rem; flex: 1 1 auto; align-items: center; gap: .7rem; padding: .65rem .7rem; border: 1px solid transparent; border-radius: .8rem; color: var(--color-base-content); background: transparent; text-align: left; transition: background-color .15s ease, border-color .15s ease; }
-.conversation-select:hover { background: #f4f6f5; }
+.conversation-row { position: relative; display: flex; width: 100%; min-width: 0; align-items: center; gap: .35rem; padding: .2rem .25rem .2rem .45rem; border: 1px solid transparent; border-radius: .8rem; }
+.conversation-select { display: flex; width: auto; min-width: 0; min-height: 3.8rem; flex: 1 1 auto; align-items: center; gap: .7rem; padding: .55rem .35rem; border: 0; border-radius: .8rem; color: var(--color-base-content); background: transparent !important; text-align: left; box-shadow: none !important; transition: background-color .15s ease, border-color .15s ease; }
+.conversation-select:hover { background: transparent !important; }
+.conversation-select:focus-visible { outline-offset: -2px; }
 .conversation-controls { display: inline-flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; gap: .15rem; padding-right: .35rem; }
-.conversation-status { padding: .25rem; }
-.conversation-menu-trigger { width: 1.8rem !important; height: 1.8rem !important; min-height: 1.8rem !important; margin: 0; border-radius: .5rem; opacity: .55; }
-.conversation-menu-trigger:hover, .conversation-menu-trigger:focus-visible, .conversation-menu-trigger[aria-expanded="true"] { background: #edf0ef; opacity: 1; }
 .conversation-actions-menu { width: 100%; gap: .15rem; color: #273139; }
 .conversation-actions-menu > li > .conversation-action-item { display: flex; min-height: 2.5rem; align-items: center; gap: .7rem; border-radius: .45rem; padding: .55rem .7rem; color: #273139 !important; font-size: .82rem; font-weight: 500; line-height: 1.35; opacity: 1 !important; }
 .conversation-actions-menu > li > .conversation-action-item:hover:not(:disabled) { background: #f1f4f2; }
 .conversation-actions-menu > li > .conversation-action-item:disabled { color: #8b9499 !important; opacity: .65 !important; }
 .conversation-actions-menu > li > .conversation-action-item > span { width: 1.1rem; color: #66736d; text-align: center; font-size: 1rem; }
-.conversation-row { padding: .2rem .25rem .2rem .45rem; border: 1px solid transparent; border-radius: .8rem; }
-.conversation-row { position: relative; }
 .conversation-row:hover { border-color: #e6ebe8; background: #f8faf8; }
 .conversation-row.is-selected {
   border-color: #c7d9ce;
@@ -159,6 +152,3 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
   color: #315e49;
 }
 .conversation-row.is-selected .conversation-name { color: #294f3d; }
-.conversation-select { min-height: 3.8rem; padding: .55rem .35rem; border: 0; background: transparent !important; box-shadow: none !important; }
-.conversation-select:hover { background: transparent !important; }
-.conversation-select:focus-visible { outline-offset: -2px; }

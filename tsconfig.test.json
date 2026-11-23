@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": false,
+    "sourceMap": false,
+    "outDir": ".test-dist",
+    "rootDir": "src",
+    "noEmit": false,
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact"
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["tests", "node_modules", "dist", ".test-dist"]
+}

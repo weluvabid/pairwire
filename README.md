@@ -48,12 +48,12 @@ The generated static site lives in `dist/` and can be hosted by any static-file 
 2. On first launch in each browser profile, choose a display name. Pairwire stores it in IndexedDB and reuses it for future connections; the name is shared with the other peer as part of the invitation/response identity metadata.
 3. In the first browser, choose **New connection**, then **Create & copy invitation**.
 4. Share the copied invitation through a messaging channel you already use.
-5. In the second browser, choose **Join a connection** and read the invitation from the clipboard.
-6. Pairwire validates the invitation, creates a response, and copies it to the clipboard. Send that response back.
-7. In the first browser, choose **Read response from clipboard** to complete pairing.
+5. In the second browser, paste the invitation into **Have an invitation or response?**. Pairwire recognises it and offers **Accept invitation**.
+6. Accepting creates a response and copies it to the clipboard. Send that response back.
+7. In the first browser, paste the response into the same field and choose **Complete connection**.
 8. Wait for both browsers to show a connected state, then exchange messages.
 
-Pairing data contains WebRTC session information and ICE candidates. It can be larger than a typical QR payload, so Pairwire uses clipboard-assisted exchange. Clipboard access requires a secure context (HTTPS or localhost) and a user gesture. If browser permissions or support prevent clipboard access, Pairwire exposes a manual paste/copy fallback. The app never reads the clipboard automatically when a dialog opens. Do not post an invitation publicly while it is in use.
+To continue an existing conversation, choose its **Reconnect** action. Pairwire creates a fresh invitation tied to the existing peer identity, preserving local history. Pairing data contains WebRTC session information and ICE candidates. Share it through a messaging channel you already use; Pairwire copies generated invitations and responses when browser clipboard writing is available, with a manual-copy fallback otherwise. Incoming text is always pasted manually because some browsers restrict clipboard reads. Pairwire validates the pasted payload before enabling an action and never reads the clipboard automatically. Do not post an invitation publicly while it is in use.
 
 ## Delivery semantics
 
@@ -80,20 +80,29 @@ History, device identity, and your display name are local to the browser profile
 ## Architecture
 
 ```text
-UI
-  └── MessagingService
-        ├── WebRtcTransport
-        │     └── RTCPeerConnection + RTCDataChannel
-        └── PairwireStore
-              └── IndexedDB
-                    ├── settings
-                    ├── peers
-                    ├── conversations
-                    ├── messages
-                    └── outbox
+src/
+├── app entry (main.tsx)
+├── components/       # Preact presentation components, grouped by feature
+├── hooks/            # UI lifecycle and state subscriptions
+├── services/         # Browser capabilities such as clipboard access
+├── utils/            # Pure formatting and derived-data helpers
+├── core/             # Protocol, message state, and messaging orchestration
+├── transport/        # WebRTC connection and data-channel lifecycle
+└── storage/          # IndexedDB transactions and persistence
+
+MessagingService
+├── WebRtcTransport
+│   └── RTCPeerConnection + RTCDataChannel
+└── PairwireStore
+    └── IndexedDB
+        ├── settings
+        ├── peers
+        ├── conversations
+        ├── messages
+        └── outbox
 ```
 
-The Preact UI renders application state and collects user input. It calls `MessagingService` for pairing, messaging, connection state, and data retrieval; it does not implement transport or persistence semantics. `MessagingService` coordinates transport with persistence. `WebRtcTransport` exchanges frames and exposes connection lifecycle events; it does not decide whether a message was delivered. `PairwireStore` owns transactional local persistence.
+The Preact UI renders application state and collects user input. Components are grouped by feature under `src/components`; UI lifecycle hooks live in `src/hooks`; clipboard access is isolated in `src/services`; and pure formatting/derived-data helpers live in `src/utils`. The UI calls `MessagingService` for pairing, messaging, connection state, and data retrieval; it does not implement transport or persistence semantics. `MessagingService` coordinates transport with persistence. `WebRtcTransport` exchanges frames and exposes connection lifecycle events; it does not decide whether a message was delivered. `PairwireStore` owns transactional local persistence. Protocol decoding rejects unsafe timestamps, malformed identifiers, and conflicting message-ID reuse. Incoming frame processing is bounded; if the receive backlog exceeds its limit, the transport closes without acknowledging queued frames so the sender can retry them after reconnecting.
 
 The signaling exchange uses a public STUN server to discover network candidates. STUN is not a messaging relay and does not receive chat contents, but it is an external connection-establishment dependency. There is no TURN relay configured, so some restrictive networks will not connect. That is an intentional MVP limit.
 
@@ -101,15 +110,16 @@ The signaling exchange uses a public STUN server to discover network candidates.
 
 ```sh
 npm run dev          # Start the Vite dev server on localhost:5173
-npm run build        # Compile core modules and bundle the static site to dist/
+npm run build        # Bundle the static site to dist/
 npm run preview      # Preview the production build locally
 npm run typecheck    # Strict TypeScript check
-npm test             # Build and run protocol/state tests with Node's test runner
+npm test             # Compile test modules separately and run Node's test suite
 npm run check        # Typecheck plus tests
 npm run hygiene:check # Check final newlines and trailing whitespace
+npm run clean:test   # Remove temporary test compilation output
 ```
 
-The unit tests use Node's built-in test runner. Preact is the UI runtime; DaisyUI and Tailwind CSS are build-time styling dependencies. TypeScript and Vite compile the app into static assets.
+The unit tests use Node's built-in test runner. Tests compile source modules into the ignored `.test-dist/` directory, separate from the production site. The production build is bundled by Vite into `dist/`; it does not ship the test compilation output or TypeScript declaration files. Preact is the UI runtime; DaisyUI and Tailwind CSS are build-time styling dependencies.
 
 ## Scope and limitations
 

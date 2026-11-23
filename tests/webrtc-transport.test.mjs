@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { WebRtcTransport } from "../dist/transport/webrtc.js";
-import { decodeSignaling } from "../dist/core/protocol.js";
+import { WebRtcTransport } from "../.test-dist/transport/webrtc.js";
+import { decodeSignaling } from "../.test-dist/core/protocol.js";
 
 class FakeDataChannel {
   readyState = "connecting";
@@ -139,4 +139,25 @@ test("reconnect invitation can be constrained to the previously known peer", asy
 
   const response = await guest.acceptInvitation(invitation, { id: "guest", name: "Guest" }, "known-peer");
   assert.equal(decodeSignaling(response, "pairwire-response").peer.id, "guest");
+});
+
+
+test("ICE gathering completion between listener registration and state recheck is observed", async (context) => {
+  const previous = globalThis.RTCPeerConnection;
+  class GatheringRaceConnection extends FakePeerConnection {
+    iceGatheringState = "gathering";
+    addEventListener(type, listener) {
+      if (type === "icegatheringstatechange") {
+        this.iceGatheringState = "complete";
+        listener();
+      }
+    }
+  }
+  globalThis.RTCPeerConnection = GatheringRaceConnection;
+  GatheringRaceConnection.instances = [];
+  context.after(() => { globalThis.RTCPeerConnection = previous; });
+
+  const transport = new WebRtcTransport(callbacks());
+  const invitation = await transport.createInvitation({ id: "peer-race", name: "Race" });
+  assert.equal(decodeSignaling(invitation, "pairwire-invitation").peer.id, "peer-race");
 });

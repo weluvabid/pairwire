@@ -4,11 +4,12 @@ import {
   createAcknowledgement,
   createWireMessage,
   decodeFrame,
+  decodeAnySignaling,
   decodeSignaling,
   encodeFrame,
   encodeSignaling,
   ProtocolError,
-} from "../dist/core/protocol.js";
+} from "../.test-dist/core/protocol.js";
 
 const alice = "peer-alice";
 const bob = "peer-bob";
@@ -85,4 +86,62 @@ test("manual signaling payloads validate role, version, peer, and SDP fields", (
   assert.throws(() => decodeSignaling(JSON.stringify({ ...invitation, version: 3 }), "pairwire-invitation"), /incompatible/);
   assert.throws(() => decodeSignaling(JSON.stringify({ ...invitation, description: { type: "answer", sdp: "x" } }), "pairwire-invitation"), /description type/);
   assert.throws(() => decodeSignaling(JSON.stringify({ ...invitation, description: { type: "offer", sdp: "  " } }), "pairwire-invitation"), /connection description/);
+});
+
+test("timestamps must be safe integer milliseconds within the Date range", () => {
+  const good = sampleMessage();
+  for (const createdAt of [1.5, Number.MAX_SAFE_INTEGER, 8_640_000_000_000_001, 1e300]) {
+    assert.throws(() => decodeFrame(JSON.stringify({ ...good, createdAt })), /createdAt/);
+  }
+});
+
+test("peer identifiers cannot make conversation keys ambiguous", () => {
+  assert.throws(() => sampleMessage({ fromPeerId: "alice:admin" }), /fromPeerId/);
+  assert.throws(() => sampleMessage({ toPeerId: "bob smith" }), /toPeerId/);
+  assert.throws(() => sampleMessage({ fromPeerId: alice, toPeerId: alice }), /same device/);
+});
+
+test("signaling display names reject whitespace-only and control-character values", () => {
+  const payload = {
+    type: "pairwire-invitation",
+    version: 1,
+    peer: { id: alice, name: "Alice" },
+    description: { type: "offer", sdp: "v=0\\r\\nexample" },
+  };
+  assert.throws(() => decodeSignaling(JSON.stringify({ ...payload, peer: { ...payload.peer, name: "   " } }), "pairwire-invitation"), /display name/);
+  assert.throws(() => decodeSignaling(JSON.stringify({ ...payload, peer: { ...payload.peer, name: "Alice\nAdmin" } }), "pairwire-invitation"), /display name/);
+});
+
+test("outgoing message and acknowledgement constructors enforce timestamp invariants", () => {
+  assert.throws(() => sampleMessage({ createdAt: 1.25 }), /createdAt/);
+  assert.throws(() => createAcknowledgement({
+    messageId: "message-1",
+    fromPeerId: bob,
+    toPeerId: alice,
+    persistedAt: 1e300,
+  }), /persistedAt/);
+});
+
+
+test("unified signaling decoder recognises invitations and responses", () => {
+  const invitation = encodeSignaling({
+    type: "pairwire-invitation",
+    version: 1,
+    peer: { id: alice, name: "Alice" },
+    description: { type: "offer", sdp: "v=0\r\n" },
+  });
+  const response = encodeSignaling({
+    type: "pairwire-response",
+    version: 1,
+    peer: { id: bob, name: "Bob" },
+    description: { type: "answer", sdp: "v=0\r\n" },
+  });
+  assert.equal(decodeAnySignaling(invitation).type, "pairwire-invitation");
+  assert.equal(decodeAnySignaling(response).type, "pairwire-response");
+});
+
+test("unified signaling decoder rejects unrelated and malformed text", () => {
+  assert.throws(() => decodeAnySignaling("hello"), ProtocolError);
+  assert.throws(() => decodeAnySignaling(JSON.stringify({ type: "unknown" })), ProtocolError);
+  assert.throws(() => decodeAnySignaling("x".repeat(256 * 1024 + 1)), /too large/);
 });

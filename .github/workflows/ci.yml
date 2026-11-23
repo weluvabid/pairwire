@@ -21,7 +21,10 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Check types and tests
         run: npm run check
+
+      - name: Build production site
+        run: npm run build
