@@ -3,7 +3,7 @@
 
 @font-face {
   font-family: "Atkinson Hyperlegible";
-  src: url("/fonts/atkinson-hyperlegible-regular.otf") format("opentype");
+  src: url("./assets/fonts/atkinson-hyperlegible-regular.otf") format("opentype");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
@@ -11,7 +11,7 @@
 
 @font-face {
   font-family: "Atkinson Hyperlegible";
-  src: url("/fonts/atkinson-hyperlegible-bold.otf") format("opentype");
+  src: url("./assets/fonts/atkinson-hyperlegible-bold.otf") format("opentype");
   font-style: normal;
   font-weight: 700;
   font-display: swap;
