@@ -4,6 +4,8 @@
 
 Pairwire is an experimental browser-based, peer-to-peer messaging app. It uses WebRTC data channels for chat, clipboard-assisted manual signaling, and IndexedDB for local conversation history and pending messages.
 
+**[Live demo](https://weluvabid.github.io/pairwire/)**
+
 Pairwire connects two browsers directly. There are no accounts or messaging servers; conversations and pending messages stay in each browser’s local storage.
 
 ## What works
