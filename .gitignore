@@ -1,21 +1,33 @@
-# Dependencies and build output
+# Dependencies
 node_modules/
+.pnpm-store/
+
+# Build output and coverage
 dist/
+build/
+out/
 .test-dist/
 coverage/
+target/
 *.tsbuildinfo
 
-# Local configuration
+# Environment and secrets
 .env
 .env.*
 !.env.example
 
-# Logs
+# Logs and caches
 *.log
 npm-debug.log*
+.cache/
+.tmp/
+.temp/
 
 # Editors and operating systems
 .idea/
-.vscode/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
 .DS_Store
 Thumbs.db
