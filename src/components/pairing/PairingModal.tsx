@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 
 export type PastedSignalingType = 'invitation' | 'response' | null;
 export type PairingPhase = 'invitation-created' | 'response-created' | 'connecting' | null;
@@ -20,10 +20,12 @@ export function PairingModal(props: {
   onReconnect(): void;
   onAcceptInvitation(): void;
   onCompleteResponse(): void;
-  onCopyInvitation(): void;
-  onCopyResponse(): void;
+  onCopyInvitation(): Promise<boolean>;
+  onCopyResponse(): Promise<boolean>;
 }) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
+  const [copied, setCopied] = useState<'invitation' | 'response' | null>(null);
+  const copiedTimer = useRef<number | null>(null);
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
@@ -31,6 +33,46 @@ export function PairingModal(props: {
     else if (!props.open && dialog.open) dialog.close();
   }, [props.open]);
 
+  useEffect(
+    () => () => {
+      if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!props.open) {
+      setCopied(null);
+      return;
+    }
+    const kind =
+      props.clipboardFallback === null && props.pairingPhase === 'invitation-created'
+        ? 'invitation'
+        : props.clipboardFallback === null && props.pairingPhase === 'response-created'
+          ? 'response'
+          : null;
+    if (!kind) return;
+    setCopied(kind);
+    if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+    copiedTimer.current = window.setTimeout(() => {
+      setCopied(null);
+      copiedTimer.current = null;
+    }, 2000);
+  }, [props.open, props.pairingPhase, props.clipboardFallback]);
+
+  const copy = async (kind: 'invitation' | 'response') => {
+    const succeeded =
+      kind === 'invitation' ? await props.onCopyInvitation() : await props.onCopyResponse();
+    if (!succeeded) return;
+    setCopied(kind);
+    if (copiedTimer.current !== null) window.clearTimeout(copiedTimer.current);
+    copiedTimer.current = window.setTimeout(() => {
+      setCopied(null);
+      copiedTimer.current = null;
+    }, 2000);
+  };
+
+  const reconnectMode = Boolean(props.reconnectPeerName);
   const busy = Boolean(props.busyAction);
   const actionLabel =
     props.pastedType === 'invitation'
@@ -87,75 +129,112 @@ export function PairingModal(props: {
           </div>
         )}
         <section class="space-y-4 px-6 pt-2 max-sm:px-4">
-          <div class="rounded-box border border-base-300 p-4 space-y-3">
-            <div>
-              <div class="text-sm font-semibold">Start a new conversation</div>
-              <p class="mt-1 text-xs leading-relaxed text-base-content/75">
-                Create an invitation and share it with someone.
-              </p>
-            </div>
-            <button
-              class="btn btn-primary w-full"
-              type="button"
-              disabled={busy}
-              onClick={props.onGenerate}
-            >
-              {props.busyAction === 'generate' ? (
-                <span class="loading loading-spinner loading-xs" />
-              ) : (
-                'Create & copy invitation'
-              )}
-            </button>
-            {props.invitationOutput && (
-              <div class="space-y-2">
-                <label class="label py-0 text-xs font-medium" htmlFor="pairwire-invitation-output">
-                  Your invitation — send this to the other person
-                </label>
-                <textarea
-                  id="pairwire-invitation-output"
-                  class="textarea textarea-bordered min-h-24 w-full resize-none font-mono text-xs"
-                  rows={4}
-                  readOnly
-                  value={props.invitationOutput}
-                />
-                {props.clipboardFallback === 'invitation-copy' && (
-                  <p class="text-xs text-warning">
-                    Automatic copying wasn&apos;t available. Select the text above and copy it
-                    manually.
-                  </p>
-                )}
-                <button
-                  class="btn btn-outline btn-sm"
-                  type="button"
-                  onClick={props.onCopyInvitation}
-                >
-                  Copy invitation
-                </button>
-              </div>
-            )}
-          </div>
-
-          {props.reconnectPeerName && (
+          {!reconnectMode ? (
             <div class="rounded-box border border-base-300 p-4 space-y-3">
               <div>
-                <div class="text-sm font-semibold">Reconnect to an existing conversation</div>
+                <div class="text-sm font-semibold">Start a new conversation</div>
                 <p class="mt-1 text-xs leading-relaxed text-base-content/75">
-                  Continue your conversation with {props.reconnectPeerName} without losing its
-                  history.
+                  Create an invitation and share it with someone.
                 </p>
               </div>
               <button
-                class="btn btn-outline w-full"
+                class="btn btn-primary w-full"
+                type="button"
+                disabled={busy}
+                onClick={props.onGenerate}
+              >
+                {props.busyAction === 'generate' ? (
+                  <span class="loading loading-spinner loading-xs" />
+                ) : copied === 'invitation' ? (
+                  'Copied to clipboard'
+                ) : (
+                  'Create & copy invitation'
+                )}
+              </button>
+              {props.invitationOutput && (
+                <div class="space-y-2">
+                  <label
+                    class="label py-0 text-xs font-medium"
+                    htmlFor="pairwire-invitation-output"
+                  >
+                    Your invitation — send this to the other person
+                  </label>
+                  <textarea
+                    id="pairwire-invitation-output"
+                    class="textarea textarea-bordered min-h-24 w-full resize-none font-mono text-xs"
+                    rows={4}
+                    readOnly
+                    value={props.invitationOutput}
+                  />
+                  {props.clipboardFallback === 'invitation-copy' && (
+                    <p class="text-xs text-warning">
+                      Automatic copying wasn&apos;t available. Select the text above and copy it
+                      manually.
+                    </p>
+                  )}
+                  <button
+                    class="btn btn-outline btn-sm"
+                    type="button"
+                    onClick={() => void copy('invitation')}
+                  >
+                    {copied === 'invitation' ? 'Copied to clipboard' : 'Copy invitation'}
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div class="rounded-box border border-base-300 p-4 space-y-3">
+              <div>
+                <div class="text-sm font-semibold">Reconnect with {props.reconnectPeerName}</div>
+                <p class="mt-1 text-xs leading-relaxed text-base-content/75">
+                  Create a fresh invitation to restore your existing conversation. Your history
+                  stays on this device.
+                </p>
+              </div>
+              <button
+                class="btn btn-primary w-full"
                 type="button"
                 disabled={busy}
                 onClick={props.onReconnect}
               >
                 {props.busyAction === 'reconnect' ? (
                   <span class="loading loading-spinner loading-xs" />
+                ) : copied === 'invitation' ? (
+                  'Copied to clipboard'
                 ) : (
-                  `Reconnect with ${props.reconnectPeerName}`
+                  'Create & copy new invitation'
                 )}
               </button>
+              {props.invitationOutput && (
+                <div class="space-y-2">
+                  <label
+                    class="label py-0 text-xs font-medium"
+                    htmlFor="pairwire-invitation-output"
+                  >
+                    Your invitation — send this to {props.reconnectPeerName}
+                  </label>
+                  <textarea
+                    id="pairwire-invitation-output"
+                    class="textarea textarea-bordered min-h-24 w-full resize-none font-mono text-xs"
+                    rows={4}
+                    readOnly
+                    value={props.invitationOutput}
+                  />
+                  {props.clipboardFallback === 'invitation-copy' && (
+                    <p class="text-xs text-warning">
+                      Automatic copying wasn&apos;t available. Select the text above and copy it
+                      manually.
+                    </p>
+                  )}
+                  <button
+                    class="btn btn-outline btn-sm"
+                    type="button"
+                    onClick={() => void copy('invitation')}
+                  >
+                    {copied === 'invitation' ? 'Copied to clipboard' : 'Copy invitation'}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -240,8 +319,12 @@ export function PairingModal(props: {
                   manually.
                 </p>
               )}
-              <button class="btn btn-outline btn-sm" type="button" onClick={props.onCopyResponse}>
-                Copy response
+              <button
+                class="btn btn-outline btn-sm"
+                type="button"
+                onClick={() => void copy('response')}
+              >
+                {copied === 'response' ? 'Copied to clipboard' : 'Copy response'}
               </button>
             </div>
           )}

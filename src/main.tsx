@@ -404,12 +404,8 @@ function App() {
 
   const openPairing = () => {
     if (!initialized || !localPeer || nameSetupOpen) return;
-    const selectedIsDisconnected = Boolean(
-      selectedPeerId &&
-      peers.some((peer) => peer.id === selectedPeerId) &&
-      !(connectionState === 'connected' && connectedPeer?.id === selectedPeerId),
-    );
-    setReconnectPeerId(selectedIsDisconnected ? selectedPeerId : null);
+    // The global New connection entry point must never inherit the selected peer.
+    setReconnectPeerId(null);
     setInvitationOutput('');
     setPastedText('');
     setPastedType(null);
@@ -462,10 +458,12 @@ function App() {
     fallback: 'invitation-copy' | 'response-copy',
     successMessage?: string,
   ): Promise<boolean> => {
+    // Retain the label parameter for existing call sites; success is shown inline.
+    void label;
     try {
       await writeClipboardText(value);
       setClipboardFallback(null);
-      showToast(successMessage ?? `${label} copied. Share it with your peer.`);
+      if (successMessage) showToast(successMessage);
       return true;
     } catch {
       setClipboardFallback(fallback);
@@ -982,10 +980,8 @@ function App() {
         onReconnect={() => void withBusy('reconnect', reconnectWithInvitation)}
         onAcceptInvitation={() => void withBusy('accept', () => acceptInvitationText(pastedText))}
         onCompleteResponse={() => void withBusy('complete', () => completeWithResponse(pastedText))}
-        onCopyInvitation={() =>
-          void writeClipboard(invitationOutput, 'Invitation', 'invitation-copy')
-        }
-        onCopyResponse={() => void writeClipboard(responseOutput, 'Response', 'response-copy')}
+        onCopyInvitation={() => writeClipboard(invitationOutput, 'Invitation', 'invitation-copy')}
+        onCopyResponse={() => writeClipboard(responseOutput, 'Response', 'response-copy')}
       />
 
       <DetailsModal
