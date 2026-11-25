@@ -86,17 +86,34 @@ function App() {
   const previousScroll = useRef({ height: 0, top: 0, nearBottom: true });
   const forceScrollToBottom = useRef(false);
   const toastId = useRef(0);
+  const toastTimers = useRef(new Map<number, number>());
+  const recentToasts = useRef(new Map<string, number>());
   const connectedPeer = messaging.connectedPeer;
   const connectionState = messaging.connectionState;
 
   const showToast = useCallback((message: string, kind: 'info' | 'error' = 'info') => {
+    const now = Date.now();
+    const dedupeKey = `${kind}:${message}`;
+    const previousAt = recentToasts.current.get(dedupeKey);
+    if (previousAt !== undefined && now - previousAt < 2500) return;
+    recentToasts.current.set(dedupeKey, now);
+
     const id = ++toastId.current;
-    setNotices((current) => [...current, { id, message, kind }]);
-    window.setTimeout(
-      () => setNotices((current) => current.filter((notice) => notice.id !== id)),
-      4500,
-    );
+    setNotices((current) => [...current, { id, message, kind }].slice(-3));
+    const timer = window.setTimeout(() => {
+      setNotices((current) => current.filter((notice) => notice.id !== id));
+      toastTimers.current.delete(id);
+    }, 4500);
+    toastTimers.current.set(id, timer);
   }, []);
+
+  useEffect(
+    () => () => {
+      for (const timer of toastTimers.current.values()) window.clearTimeout(timer);
+      toastTimers.current.clear();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (connectionState !== 'connected' || !connectedPeer || !pairingPhase) return;

@@ -49,7 +49,7 @@ export function NameSetupModal({
             </label>
             <input
               id="display-name-setup"
-              class="input input-bordered w-full"
+              class="input input-bordered w-full text-base!"
               name="display-name"
               value={value}
               maxLength={48}

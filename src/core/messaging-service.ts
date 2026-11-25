@@ -201,12 +201,6 @@ export class MessagingService {
             this.callbacks.onNotice(errorMessage(error), 'error'),
           );
         }
-        if (state === 'failed' || state === 'disconnected') {
-          this.callbacks.onNotice(
-            'Connection interrupted. Pending messages stay on this device.',
-            'info',
-          );
-        }
         this.callbacks.onChange();
       },
       onData: (data) => {
@@ -242,7 +236,12 @@ export class MessagingService {
           );
         }
       },
-      onError: (error) => this.callbacks.onNotice(error.message, 'error'),
+      onError: (error) => {
+        // The connection-state banner already communicates transport interruption.
+        // Keep actionable data-format errors visible, but suppress this generic browser event.
+        if (error.message === 'The WebRTC data channel reported an error.') return;
+        this.callbacks.onNotice(error.message, 'error');
+      },
     });
     transportRef.current = transport;
     this.transport = transport;
